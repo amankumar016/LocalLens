@@ -1,0 +1,6 @@
+{
+  "name": "Heritage Civic Scenario Planner",
+  "description": "An AI-powered Decision Intelligence Platform for multi-city heritage policy modeling, micro-entrepreneur ledger simulations, scenic route navigation, and community trust auditing across historic Indian destinations.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
