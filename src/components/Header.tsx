@@ -1,10 +1,10 @@
 import React, { useState } from "react";
-import { Compass, Menu, X, ShieldAlert, Users, Layers, AlertTriangle, MapPin, ChevronDown, Radio, GitCompare, Search } from "lucide-react";
+import { Compass, Menu, X, ShieldAlert, Users, Layers, AlertTriangle, MapPin, ChevronDown, Radio, GitCompare, Search, LayoutDashboard, Volume2 } from "lucide-react";
 import { motion } from "motion/react";
 
 interface HeaderProps {
-  activeTab: 'explore' | 'simulator' | 'compare' | 'hub' | 'navigator' | 'feeds' | 'alerts';
-  setActiveTab: (tab: 'explore' | 'simulator' | 'compare' | 'hub' | 'navigator' | 'feeds' | 'alerts') => void;
+  activeTab: 'explore' | 'simulator' | 'compare' | 'hub' | 'navigator' | 'feeds' | 'alerts' | 'dashboard' | 'storyteller';
+  setActiveTab: (tab: 'explore' | 'simulator' | 'compare' | 'hub' | 'navigator' | 'feeds' | 'alerts' | 'dashboard' | 'storyteller') => void;
   activeCity: string | null;
   setActiveCity: (city: string) => void;
   onOpenReportModal?: () => void;
@@ -118,13 +118,15 @@ export default function Header({
   }
 
   const navItems = [
-    { id: 'explore', label: 'Explore & Plan', icon: Compass },
-    { id: 'simulator', label: 'Scenario Simulator', icon: Layers },
-    { id: 'compare', label: 'Scenario Comparison', icon: GitCompare },
-    { id: 'hub', label: 'MicroPreneur Hub', icon: Users },
-    { id: 'navigator', label: 'Trip Navigator', icon: MapPin },
-    { id: 'feeds', label: 'Real-Time Feeds', icon: Radio },
-    { id: 'alerts', label: 'Civic Security Logs', icon: ShieldAlert }
+    { id: 'explore', label: 'Explore', icon: Compass },
+    { id: 'dashboard', label: 'Stakeholder', icon: LayoutDashboard },
+    { id: 'storyteller', label: 'Storyteller', icon: Volume2 },
+    { id: 'simulator', label: 'Simulator', icon: Layers },
+    { id: 'compare', label: 'Compare', icon: GitCompare },
+    { id: 'hub', label: 'Artisan Hub', icon: Users },
+    { id: 'navigator', label: 'Navigator', icon: MapPin },
+    { id: 'feeds', label: 'Feeds', icon: Radio },
+    { id: 'alerts', label: 'Alerts', icon: ShieldAlert }
   ] as const;
 
   const currentCity = activeCity ? (cityMetaData[activeCity as keyof typeof cityMetaData] || {
@@ -145,6 +147,49 @@ export default function Header({
     <header className="sticky top-0 z-50 bg-brand-dark/95 backdrop-blur-md border-b border-brand-teal/20 shadow-md text-white w-full">
       <div className="max-w-[1500px] mx-auto px-4 sm:px-6 lg:px-8 h-14 flex items-center justify-between gap-4">
         
+        {/* Brand & City Dropdown */}
+        <div className="flex items-center gap-2.5 flex-shrink-0">
+          <div className="w-8 h-8 rounded-xl bg-brand-rose flex items-center justify-center text-brand-deep font-extrabold text-sm shadow-md border border-brand-rose/20 select-none">
+            {currentCity ? currentCity.logoChar : "L"}
+          </div>
+          <div className="relative">
+            <button
+              onClick={() => setIsCityDropdownOpen(!isCityDropdownOpen)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-brand-bg/50 hover:bg-brand-bg/80 text-left text-xs font-extrabold text-white transition-all cursor-pointer border border-brand-teal/20 shadow-sm"
+              id="header-city-selector-btn"
+            >
+              <MapPin className="h-3 w-3 text-brand-rose shrink-0" />
+              <span>{currentCity ? currentCity.name : "Select Corridor"}</span>
+              <ChevronDown className={`h-3 w-3 text-slate-400 transition-transform duration-200 ${isCityDropdownOpen ? 'rotate-180' : ''}`} />
+            </button>
+
+            {isCityDropdownOpen && (
+              <div className="absolute left-0 mt-2 w-48 bg-brand-dark/95 backdrop-blur-md border border-brand-teal/20 rounded-xl p-1 z-50 shadow-2xl space-y-0.5 animate-fade-in">
+                {Object.entries(cityMetaData).map(([id, data]) => (
+                  <button
+                    key={id}
+                    onClick={() => selectCity(id)}
+                    className={`w-full flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer text-left ${
+                      activeCity === id 
+                        ? "bg-brand-rose text-brand-deep shadow-md font-extrabold" 
+                        : "text-slate-300 hover:bg-brand-bg/60 hover:text-white"
+                    }`}
+                  >
+                    <div className={`w-5 h-5 rounded-md flex items-center justify-center font-extrabold text-[9px] ${
+                      activeCity === id ? "bg-brand-deep text-brand-rose" : "bg-brand-teal text-white"
+                    }`}>
+                      {data.logoChar}
+                    </div>
+                    <div className="flex flex-col min-w-0">
+                      <span className="leading-none text-xs">{data.name}</span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
         {/* City/Landmark Search Bar */}
         <div className="relative flex-1 max-w-xs sm:max-w-sm hidden md:block" id="header-city-search-container">
           <div className="relative flex items-center">

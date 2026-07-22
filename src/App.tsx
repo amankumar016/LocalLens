@@ -409,6 +409,15 @@ export default function App() {
   const [isAILoading, setIsAILoading] = useState<boolean>(false);
   const briefDebounceRef = useRef<NodeJS.Timeout | null>(null);
   const [simulatorSubTab, setSimulatorSubTab] = useState<'policy' | 'models' | 'split'>('policy');
+
+  // Multilingual Voice Onboarding States
+  const [isOnboardingOpen, setIsOnboardingOpen] = useState<boolean>(false);
+  const [onboardingText, setOnboardingText] = useState<string>("");
+  const [onboardingLoading, setOnboardingLoading] = useState<boolean>(false);
+  const [onboardingStep, setOnboardingStep] = useState<string>("");
+  const [isOnboardingSuccess, setIsOnboardingSuccess] = useState<boolean>(false);
+  const [onboardedMerchant, setOnboardedMerchant] = useState<Entrepreneur | null>(null);
+  const [isRecordingSimulating, setIsRecordingSimulating] = useState<boolean>(false);
   
   // Split-Screen Side-by-Side Simulation States
   const [inputsA, setInputsA] = useState<PolicyInputs>({
@@ -1265,6 +1274,52 @@ export default function App() {
             showToast(`🎙️ Standard price-capped product translation ready for ${productData.englishName}!`);
           }, 600);
         }, 1000);
+      }, 1000);
+    }, 1000);
+  };
+
+  // Submits the merchant spoken audio/text transcription to Swadeshi AI voice onboarding
+  const handleVoiceOnboardingSubmit = async (textToSubmit: string) => {
+    if (!textToSubmit) return;
+    setOnboardingLoading(true);
+    setOnboardingStep("🎙️ Initializing Swadeshi secure voice portal...");
+
+    setTimeout(async () => {
+      setOnboardingStep("🗣️ Translating regional dialect phonemes...");
+
+      setTimeout(async () => {
+        setOnboardingStep("🧠 Swadeshi AI drafting digital ledger profile card...");
+
+        try {
+          const res = await fetch("/api/onboard/voice", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              recordedText: textToSubmit,
+              city: activeCity
+            })
+          });
+
+          if (res.ok) {
+            const data = await res.json();
+            if (data.success) {
+              setEntrepreneurs(data.list);
+              setSelectedEntrepreneurId(data.merchant.id);
+              setOnboardedMerchant(data.merchant);
+              setIsOnboardingSuccess(true);
+              showToast(`🎉 Onboarded! Welcome ${data.merchant.name} to the Swadeshi micro-merchant registry.`);
+            } else {
+              showToast("⚠️ Standard verification declined. Please try again.");
+            }
+          } else {
+            showToast("❌ Unable to register merchant. Connection issue.");
+          }
+        } catch (err) {
+          console.error("Voice onboarding failed:", err);
+          showToast("❌ Connection error accessing Swadeshi voice ledger.");
+        } finally {
+          setOnboardingLoading(false);
+        }
       }, 1000);
     }, 1000);
   };
@@ -3161,6 +3216,19 @@ export default function App() {
                     </h2>
                     <p className="text-[11px] text-slate-400 mt-0.5">Audit verified ledger earnings and cooperatives</p>
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsOnboardingOpen(true);
+                      setIsOnboardingSuccess(false);
+                      setOnboardingText("");
+                      setOnboardedMerchant(null);
+                    }}
+                    className="px-3 py-1.5 bg-brand-teal/10 hover:bg-brand-teal/20 active:scale-95 border border-brand-teal/30 hover:border-brand-teal/50 rounded-xl text-[10px] font-extrabold text-brand-teal uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
+                  >
+                    <Mic className="h-3.5 w-3.5 text-brand-teal animate-pulse" />
+                    <span>Join Hub (Voice)</span>
+                  </button>
                 </div>
 
                 {/* Search & Filters */}
@@ -4869,6 +4937,279 @@ export default function App() {
                 </div>
               )}
             </form>
+
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: MULTILINGUAL VOICE ONBOARDING */}
+      {isOnboardingOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-md animate-fade-in text-white" id="voice-onboarding-modal">
+          <div className="bg-brand-dark rounded-[32px] max-w-lg w-full overflow-hidden shadow-2xl border border-brand-teal/20 flex flex-col max-h-[90vh]">
+            
+            {/* Header */}
+            <div className="bg-gradient-to-r from-brand-deep to-brand-dark px-6 py-5 border-b border-brand-teal/15 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <Mic className="h-5 w-5 text-brand-rose animate-pulse" />
+                <div>
+                  <h2 className="text-sm font-extrabold font-display">Swadeshi AI Voice Onboarding</h2>
+                  <p className="text-[9px] text-slate-300 font-medium mt-0.5">Register a heritage micro-shop in seconds via multilingual speech</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => {
+                  setIsOnboardingOpen(false);
+                  setIsRecordingSimulating(false);
+                }}
+                className="p-1 rounded-full hover:bg-white/10 text-white/85 hover:text-white transition-colors cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 space-y-5 overflow-y-auto">
+              {isOnboardingSuccess && onboardedMerchant ? (
+                /* Success view */
+                <div className="py-6 space-y-5 text-center animate-fade-in">
+                  <div className="w-12 h-12 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto border border-emerald-500/25">
+                    <Check className="h-6 w-6 animate-bounce" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-white text-base">Shop Successfully Registered!</h3>
+                    <p className="text-xs text-slate-400 mt-1">
+                      Your voice description was parsed and standard ledger records have been generated.
+                    </p>
+                  </div>
+
+                  {/* Generated Card Preview */}
+                  <div className="p-4 bg-brand-bg border border-emerald-500/20 rounded-2xl text-left space-y-3 max-w-sm mx-auto shadow-inner">
+                    <div className="flex items-center gap-3">
+                      <ArtisanAvatar 
+                        src={onboardedMerchant.avatar} 
+                        name={onboardedMerchant.name}
+                        className="w-12 h-12 rounded-xl border border-brand-teal/15"
+                      />
+                      <div>
+                        <span className="text-[8px] font-black uppercase tracking-widest text-emerald-400 font-mono">Verified Swadeshi Ledger</span>
+                        <h4 className="text-xs font-bold text-white">{onboardedMerchant.name}</h4>
+                        <p className="text-[10px] text-slate-400">{onboardedMerchant.role} • {onboardedMerchant.location}</p>
+                      </div>
+                    </div>
+                    <div className="p-2.5 bg-brand-dark/40 rounded-xl text-[10px] text-slate-300 italic leading-relaxed border border-brand-teal/5">
+                      "{onboardedMerchant.bio}"
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-[10px] font-bold">
+                      <div className="bg-brand-dark/40 p-2 rounded-xl">
+                        <span className="text-slate-400 block text-[8px] uppercase font-mono">Assigned Union</span>
+                        <span className="text-white truncate block">{onboardedMerchant.cooperativeName}</span>
+                      </div>
+                      <div className="bg-brand-dark/40 p-2 rounded-xl">
+                        <span className="text-slate-400 block text-[8px] uppercase font-mono">Base Income</span>
+                        <span className="text-brand-rose block">₹{onboardedMerchant.baseIncome}/day</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={() => {
+                      setIsOnboardingOpen(false);
+                      setIsRecordingSimulating(false);
+                    }}
+                    className="w-full py-3 bg-emerald-500 hover:bg-emerald-600 text-brand-deep font-bold rounded-2xl text-xs transition-all cursor-pointer shadow-md active:scale-98"
+                  >
+                    Open Swadeshi Corridor Dashboard
+                  </button>
+                </div>
+              ) : onboardingLoading ? (
+                /* Loading View with beautiful stages */
+                <div className="py-12 text-center space-y-6 animate-fade-in">
+                  <div className="relative w-16 h-16 mx-auto">
+                    <div className="absolute inset-0 rounded-full border-2 border-brand-rose/20" />
+                    <div className="absolute inset-0 rounded-full border-2 border-t-brand-rose border-r-brand-rose animate-spin" />
+                    <Mic className="h-6 w-6 text-brand-rose absolute inset-0 m-auto animate-pulse" />
+                  </div>
+                  <div className="space-y-2">
+                    <h4 className="text-sm font-bold text-white uppercase tracking-wider font-mono">Processing Voice Streams</h4>
+                    <p className="text-xs text-brand-rose font-medium animate-pulse">{onboardingStep}</p>
+                  </div>
+                  <p className="text-[10px] text-slate-400 max-w-xs mx-auto leading-relaxed">
+                    Connecting to server-side Google Gemini translation pipelines to synthesize dialect accents, standard crafts, and local co-op affiliations...
+                  </p>
+                </div>
+              ) : (
+                /* Onboarding Input View */
+                <div className="space-y-5">
+                  <div className="p-3.5 bg-brand-teal/5 border border-brand-teal/10 rounded-2xl">
+                    <h4 className="text-[10px] font-bold text-brand-teal uppercase tracking-wider mb-1">How it works</h4>
+                    <p className="text-[11px] text-slate-300 leading-relaxed font-semibold">
+                      Swadeshi Voice lets traditional Indian merchants dictate their shop story in their native language. Swadeshi AI automatically translates regional dialects, standardizes categories, maps a cooperative guild, and builds a verified profile card.
+                    </p>
+                  </div>
+
+                  {/* Micro simulated recorder */}
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">🗣️ Speak or Dictate Shop Story</label>
+                      <span className="text-[8px] font-bold bg-brand-rose/10 text-brand-rose border border-brand-rose/20 px-1.5 py-0.5 rounded font-mono">Multilingual Dialect Parser</span>
+                    </div>
+
+                    <div className="relative bg-brand-bg border border-brand-teal/10 rounded-2xl p-4 min-h-[140px] flex flex-col justify-between">
+                      {isRecordingSimulating ? (
+                        <div className="flex-1 flex flex-col items-center justify-center space-y-3.5 my-4">
+                          <div className="flex items-center gap-1 h-8">
+                            <span className="w-1 bg-brand-rose h-3 rounded animate-bounce [animation-delay:0.1s]" />
+                            <span className="w-1 bg-brand-rose h-6 rounded animate-bounce [animation-delay:0.2s]" />
+                            <span className="w-1 bg-brand-rose h-4 rounded animate-bounce [animation-delay:0.3s]" />
+                            <span className="w-1 bg-brand-rose h-7 rounded animate-bounce [animation-delay:0.4s]" />
+                            <span className="w-1 bg-brand-rose h-2 rounded animate-bounce [animation-delay:0.5s]" />
+                            <span className="w-1 bg-brand-rose h-5 rounded animate-bounce [animation-delay:0.6s]" />
+                            <span className="w-1 bg-brand-rose h-3 rounded animate-bounce [animation-delay:0.7s]" />
+                          </div>
+                          <p className="text-[10px] font-mono text-brand-rose animate-pulse uppercase tracking-widest font-black">Recording Audio Feed...</p>
+                        </div>
+                      ) : (
+                        <textarea
+                          rows={4}
+                          value={onboardingText}
+                          onChange={(e) => setOnboardingText(e.target.value)}
+                          placeholder="Speak in Hindi, Bhojpuri, Malayalam, Kannada, Marwari or type here... e.g. 'मेरा नाम राम है। गंगा घाट पर नाव चलाता हूँ। दलालों से परेशान हूँ...'"
+                          className="w-full bg-transparent border-none text-xs font-semibold focus:outline-none resize-none text-white placeholder-slate-500"
+                        />
+                      )}
+
+                      <div className="flex justify-between items-center border-t border-brand-teal/10 pt-3 mt-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (isRecordingSimulating) return;
+                            setIsRecordingSimulating(true);
+                            // Choose an authentic template speech based on city
+                            let speech = "";
+                            if (activeCity === 'varanasi') {
+                              speech = "मेरा नाम अमित सोनी है। मदनपुरा गली में शुद्ध बनारसी रेशम की साड़ियाँ हथकरघे पर बुनते हैं। दलाल लोग हमारा 40% तक कमीशन खा जाते हैं, जिससे जीवनयापन मुश्किल हो जाता है। सरकारी मानक दर से हमें बहुत सहारा मिलेगा।";
+                            } else if (activeCity === 'jaipur') {
+                              speech = "म्हारೋ नाम गोविन्द प्रसाद है, मैं सांगानेर में ब्लू पॉटरी रो काम करूं। भट्टी को ईंधन मंहगो होवे है और आढ़ती बहुत कटौती करे है। सीधा पर्यटक आवे तो हमारा कोपरटिव को बडो फायदो मिलेगो।";
+                            } else if (activeCity === 'kochi') {
+                              speech = "എന്റെ പേര് കുഞ്ഞുമോൻ. ഫോർട്ട് കൊച്ചിയിലെ ചീനവലകൾ പ്രവർത്തിപ്പിക്കുന്ന ആളാണ് ഞാൻ. വിനോദസഞ്ചാരികളിൽ നിന്ന് നിശ്ചിത നിരക്കുകൾ ഈടാക്കാൻ കഴിഞ്ഞാൽ ബ്രോക്കർമാരുടെ ശല്യം ഇല്ലാതെ ജീവിക്കാം.";
+                            } else {
+                              speech = "ನನ್ನ ಹೆಸರು ತಿಮ್ಮಪ್ಪ ಗೌಡ. ಹಂಪಿಯಲ್ಲಿ ಬಾಳೆ ನಾರಿನಿಂದ ಚೀಲಗಳನ್ನು ನೇಯುತ್ತೇವೆ. ನಮಗೆ ನೇರ ಗ್ರಾಹಕರು ಸಿಗುವಂತಾಗಲಿ.";
+                            }
+                            
+                            setTimeout(() => {
+                              setIsRecordingSimulating(false);
+                              setOnboardingText(speech);
+                              showToast("🎙️ Simulated Speech Recorded & Transcribed successfully!");
+                            }, 3500);
+                          }}
+                          disabled={isRecordingSimulating}
+                          className="px-3 py-1.5 bg-brand-rose/10 hover:bg-brand-rose/20 disabled:opacity-50 text-brand-rose text-[9.5px] font-bold rounded-xl flex items-center gap-1.5 transition-all cursor-pointer border border-brand-rose/20"
+                        >
+                          <Mic className="h-3.5 w-3.5 text-brand-rose animate-pulse" />
+                          <span>{isRecordingSimulating ? "Dictating..." : "Simulate Mic Dictation"}</span>
+                        </button>
+
+                        <span className="text-[9px] text-slate-400 font-mono">
+                          {onboardingText.length} chars
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Preset Language Dialects */}
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Or Select a Multilingual Sample Speech</label>
+                    <div className="grid grid-cols-1 gap-1.5 max-h-[160px] overflow-y-auto pr-1">
+                      {activeCity === 'varanasi' ? (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => setOnboardingText("हमार नाम सीता देवी बा। हम खोजवां में लकड़ी के खिलौना बनावेली, बहुत सुंदर हाथी-घोड़ा आ गाड़ी। बिचौलिया बहुत कमीशन लेले, हम सीधे बेचल चाहत बानी।")}
+                            className="text-left p-2.5 bg-brand-bg hover:bg-brand-teal/10 border border-brand-teal/15 rounded-xl text-[10px] text-slate-300 transition-colors cursor-pointer"
+                          >
+                            <strong>Bhojpuri/Hindi:</strong> "हमार नाम सीता देवी बा। हम खोजवां में लकड़ी..." (Toy Maker)
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setOnboardingText("I am Amit Soni from Madanpura. We weave pure Banarasi silk sarees on handlooms. Saree brokers take 40% cut. Standard pricing would save us.")}
+                            className="text-left p-2.5 bg-brand-bg hover:bg-brand-teal/10 border border-brand-teal/15 rounded-xl text-[10px] text-slate-300 transition-colors cursor-pointer"
+                          >
+                            <strong>English:</strong> "I am Amit Soni from Madanpura. We weave pure..." (Weaver)
+                          </button>
+                        </>
+                      ) : activeCity === 'jaipur' ? (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => setOnboardingText("म्हारோ नाम गोविन्द प्रसाद है, मैं सांगानेर में ब्लू पॉटरी रो काम करूं। भट्टी को खर्चो बहुत होवे है, सीधा ग्राहक मिले तो फायदो होवे।")}
+                            className="text-left p-2.5 bg-brand-bg hover:bg-brand-teal/10 border border-brand-teal/15 rounded-xl text-[10px] text-slate-300 transition-colors cursor-pointer"
+                          >
+                            <strong>Marwari/Hindi:</strong> "म्हारೋ नाम गोविन्द प्रसाद है, मैं सांगानेर में..." (Potter)
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setOnboardingText("My name is Meera Bai. We stitch beautiful Kathputli dolls and puppets at Johari Bazaar. Direct tourist bookings will protect our family craft.")}
+                            className="text-left p-2.5 bg-brand-bg hover:bg-brand-teal/10 border border-brand-teal/15 rounded-xl text-[10px] text-slate-300 transition-colors cursor-pointer"
+                          >
+                            <strong>English:</strong> "My name is Meera Bai. We stitch beautiful..." (Puppeteer)
+                          </button>
+                        </>
+                      ) : activeCity === 'kochi' ? (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => setOnboardingText("എന്റെ പേര് കുഞ്ഞുമോൻ. ഞാൻ ഫോർട്ട് കൊച്ചിയിൽ ചീനവലകൾ വീശി മീൻ പിടിക്കുന്നു. കടൽ പ്രക്ഷുബ്ധമാകുമ്പോൾ പണി തടസ്സപ്പെടും, നേരിട്ട് വിൽക്കാൻ കഴിഞ്ഞാൽ നല്ലത്.")}
+                            className="text-left p-2.5 bg-brand-bg hover:bg-brand-teal/10 border border-brand-teal/15 rounded-xl text-[10px] text-slate-300 transition-colors cursor-pointer"
+                          >
+                            <strong>Malayalam:</strong> "എന്റെ പേര് കുഞ്ഞുമോൻ. ഞാൻ ഫോർട്ട് കൊച്ചിയിൽ..." (Fisherman)
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setOnboardingText("I am Joseph. We weave coir rugs and mats near Vembanad backwaters. The middlemen commissions are very high. Direct trade will help.")}
+                            className="text-left p-2.5 bg-brand-bg hover:bg-brand-teal/10 border border-brand-teal/15 rounded-xl text-[10px] text-slate-300 transition-colors cursor-pointer"
+                          >
+                            <strong>English:</strong> "I am Joseph. We weave coir rugs and mats..." (Weaver)
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => setOnboardingText("ನನ್ನ ಹೆಸರು ತಿಮ್ಮಪ್ಪ ಗೌಡ. ಹಂಪಿಯಲ್ಲಿ ಬಾಳೆ ನಾರಿನಿಂದ ಚೀಲ ಮತ್ತು ಮ್ಯಾಟ್‌ಗಳನ್ನು ನೇಯುತ್ತೇವೆ. ಸರಿಯಾದ ಮಾರುಕಟ್ಟೆ ನಮಗೆ ಸಿಗಬೇಕು.")}
+                            className="text-left p-2.5 bg-brand-bg hover:bg-brand-teal/10 border border-brand-teal/15 rounded-xl text-[10px] text-slate-300 transition-colors cursor-pointer"
+                          >
+                            <strong>Kannada:</strong> "ನನ್ನ ಹೆಸರು ತಿಮ್ಮಪ್ಪ ಗೌಡ. ಹಂಪಿಯಲ್ಲಿ ಬಾಳೆ..." (Weaver)
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Submission buttons */}
+                  <div className="flex gap-3 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsOnboardingOpen(false);
+                        setIsRecordingSimulating(false);
+                      }}
+                      className="flex-1 py-2.5 border border-brand-teal/20 hover:bg-brand-bg/60 text-slate-300 font-bold rounded-xl text-xs cursor-pointer transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleVoiceOnboardingSubmit(onboardingText)}
+                      disabled={!onboardingText || isRecordingSimulating}
+                      className="flex-1 py-2.5 bg-brand-rose hover:bg-brand-rose/90 disabled:opacity-50 text-brand-deep font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-sm transition-all"
+                    >
+                      <Sparkles className="h-3.5 w-3.5 text-brand-deep" />
+                      <span>Onboard Shop (AI)</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
 
           </div>
         </div>

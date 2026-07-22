@@ -1095,10 +1095,12 @@ function calculateCivicMetrics(inputs: PolicyInputs): SimulationResult {
 // Generate the localized impacts on individual artisans / entrepreneurs
 function updateEntrepreneursIncome(inputs: PolicyInputs, metrics: SimulationResult): Entrepreneur[] {
   const city = inputs.city || 'varanasi';
-  const baselineList = entrepreneursByCity[city] || entrepreneursByCity.varanasi;
+  const currentList = activeEntrepreneurs[city] && activeEntrepreneurs[city].length > 0
+    ? activeEntrepreneurs[city]
+    : (entrepreneursByCity[city] || entrepreneursByCity.varanasi);
   const activeDirectives = inputs.activeDirectives || [];
 
-  return baselineList.map(e => {
+  return currentList.map(e => {
     let multiplier = 1.0;
     let trustOffset = 0;
     let statusText = "";
@@ -1513,6 +1515,168 @@ app.get("/api/entrepreneurs", (req, res) => {
   const city = (req.query.city as string || 'varanasi').toLowerCase();
   const list = activeEntrepreneurs[city] || (dynamicCityDataPacks.has(city) ? dynamicCityDataPacks.get(city).entrepreneurs : null) || entrepreneursByCity[city] || entrepreneursByCity.varanasi;
   res.json(list);
+});
+
+app.post("/api/onboard/voice", async (req, res) => {
+  const { recordedText, city, role: specifiedRole } = req.body;
+  const cleanCity = (city || 'varanasi').toLowerCase();
+
+  if (!recordedText) {
+    return res.status(400).json({ error: "Missing spoken voice description text" });
+  }
+
+  let generatedProfile: Partial<Entrepreneur> = {};
+
+  const avatarPool = [
+    "https://images.unsplash.com/photo-1595211877493-41a4e5f236b3?auto=format&fit=crop&q=80&w=200&h=200",
+    "https://images.unsplash.com/photo-1589301760014-d929f3979dbc?auto=format&fit=crop&q=80&w=200&h=200",
+    "https://images.unsplash.com/photo-1607990283143-e81e7a2c93ab?auto=format&fit=crop&q=80&w=200&h=200",
+    "https://images.unsplash.com/photo-1618018352910-334fd7f357c2?auto=format&fit=crop&q=80&w=200&h=200",
+    "https://images.unsplash.com/photo-1624561172888-ac93c696e10c?auto=format&fit=crop&q=80&w=200&h=200",
+    "https://images.unsplash.com/photo-1566753323558-f4e0952af115?auto=format&fit=crop&q=80&w=200&h=200"
+  ];
+
+  const defaultAvatar = avatarPool[Math.floor(Math.random() * avatarPool.length)];
+
+  if (isGeminiAvailable()) {
+    const ai = getAI();
+    if (ai) {
+      try {
+        const prompt = `You are the Swadeshi AI Cooperative Onboarding Officer. 
+A heritage micro-entrepreneur / merchant is onboarding their shop in the city of "${cleanCity}" (which is one of: varanasi, jaipur, kochi, hampi).
+They have recorded their voice describing their shop/craft. The transcribed text (which may be in English, Hindi, Bhojpuri, Marwari, Malayalam, Kannada, or code-mixed language) is:
+"${recordedText}"
+
+Your task is to analyze this multilingual spoken description, translate/transcribe it into a beautifully structured, highly authentic merchant profile card in English.
+
+You must output a JSON object adhering exactly to this schema:
+{
+  "name": "Authentic regional name (e.g. Ramesh Giri or Amit Soni or Meera Bai or Thimmappa, suited to the city's language context. If they said their name, extract it, otherwise invent a realistic, respectful regional name)",
+  "role": "Must be exactly one of: \\"Weaver\\", \\"Boatman\\", \\"E-Rickshaw Driver\\", \\"Toy Maker\\". Map their craft or service to the closest match.",
+  "location": "A scenic, authentic landmark in ${cleanCity} where they operate (e.g. Assi Ghat or Godowlia Crossing or Sanganer Guild or Fort Kochi beach or Hampi Ruins)",
+  "cooperativeName": "An authentic, regional guild or cooperative association name (e.g. \\"Ganga Boatman Association\\", \\"Sanganer Artisans Co-op\\", \\"Malabar Coir Union\\", or \\"Hampi Fiber Handloom Collective\\")",
+  "bio": "A beautifully written, highly respectful, evocative 2-3 sentence biography in English capturing the soul of their heritage craft, family tradition, or shop, as described or inferred from their voice recording.",
+  "baseIncome": "A reasonable estimated daily baseline income in INR, e.g. a number between 300 and 700 based on their role",
+  "impactStatus": "A clear, concise, dignified statement of how policy standardizations (like ending commissions or rickshaw subsidies) will affect their shop (e.g. \\"Optimistic that standardized rates will end deceptive middlemen cuts.\\")"
+}
+
+Make sure the tone is incredibly supportive, celebrating the dignity of Indian street artisans and micro-entrepreneurs. Keep the generated information realistic and grounded. Do not output anything other than raw JSON.`;
+
+        const response = await ai.models.generateContent({
+          model: "gemini-3.6-flash",
+          contents: prompt,
+          config: {
+            responseMimeType: "application/json",
+            responseSchema: {
+              type: Type.OBJECT,
+              properties: {
+                name: { type: Type.STRING },
+                role: { type: Type.STRING },
+                location: { type: Type.STRING },
+                cooperativeName: { type: Type.STRING },
+                bio: { type: Type.STRING },
+                baseIncome: { type: Type.NUMBER },
+                impactStatus: { type: Type.STRING }
+              },
+              required: ["name", "role", "location", "cooperativeName", "bio", "baseIncome", "impactStatus"]
+            }
+          }
+        });
+
+        const jsonText = response.text?.trim() || "{}";
+        generatedProfile = JSON.parse(jsonText);
+      } catch (err) {
+        handleGeminiError(err, "Voice Onboarding");
+      }
+    }
+  }
+
+  // High-fidelity fallback / heuristic generator in case Gemini is offline/rate-limited
+  if (!generatedProfile.name) {
+    console.log("Using heuristic fallback for voice onboarding.");
+    const textLower = recordedText.toLowerCase();
+    
+    // Heuristic names based on city
+    let name = "Swadeshi Merchant";
+    let location = "Heritage Bazaar";
+    let cooperativeName = "Local Swadeshi Guild";
+    let role = specifiedRole || "Weaver";
+    let bio = `A proud heritage micro-entrepreneur specializing in local authentic items, registered via Swadeshi voice onboarding. Description: "${recordedText}"`;
+    let baseIncome = 450;
+    let impactStatus = "Hoping for standard pricing rules to protect honest income.";
+
+    if (cleanCity === 'varanasi') {
+      name = textLower.includes("devi") || textLower.includes("sita") ? "Sita Devi" : "Rajesh Kumar";
+      location = textLower.includes("ghat") || textLower.includes("boat") || textLower.includes("नाव") ? "Assi Ghat" : "Madanpura Saree Lane";
+      cooperativeName = textLower.includes("boat") || textLower.includes("नाव") ? "Ganga Shikara Boatmen Union" : "Banarasi Handloom Co-operative";
+      role = (textLower.includes("boat") || textLower.includes("नाव")) ? "Boatman" 
+             : (textLower.includes("saree") || textLower.includes("रेशम") || textLower.includes("साड़ी") || textLower.includes("weave")) ? "Weaver"
+             : (textLower.includes("rickshaw") || textLower.includes("auto")) ? "E-Rickshaw Driver"
+             : "Toy Maker";
+    } else if (cleanCity === 'jaipur') {
+      name = textLower.includes("devi") || textLower.includes("meera") ? "Meera Saini" : "Govind Sharma";
+      location = textLower.includes("pot") || textLower.includes("वासण") || textLower.includes("clay") ? "Sanganer Craft Guild" : "Hawa Mahal Plaza";
+      cooperativeName = textLower.includes("pot") || textLower.includes("वासण") || textLower.includes("clay") ? "Sanganer Blue Pottery Guild" : "Rajasthani Puppeteers Collective";
+      role = (textLower.includes("pot") || textLower.includes("वासण") || textLower.includes("clay")) ? "Weaver" 
+             : (textLower.includes("puppet") || textLower.includes("कठपुतली") || textLower.includes("toy")) ? "Toy Maker"
+             : (textLower.includes("rickshaw") || textLower.includes("auto")) ? "E-Rickshaw Driver"
+             : "Boatman";
+    } else if (cleanCity === 'kochi') {
+      name = "Kunjumon Joseph";
+      location = textLower.includes("net") || textLower.includes("fish") ? "Fort Kochi Beach" : "Vembanad Backwaters";
+      cooperativeName = textLower.includes("net") || textLower.includes("fish") ? "Kerala Coir Workers & Fishers association" : "Malabar Coir Union";
+      role = (textLower.includes("net") || textLower.includes("fish") || textLower.includes("boat")) ? "Boatman"
+             : (textLower.includes("coir") || textLower.includes("mat") || textLower.includes("weaver")) ? "Weaver"
+             : (textLower.includes("auto") || textLower.includes("tuk")) ? "E-Rickshaw Driver"
+             : "Toy Maker";
+    } else if (cleanCity === 'hampi') {
+      name = "Thimmappa Gowda";
+      location = textLower.includes("stone") || textLower.includes("carv") ? "Vittala Temple Yard" : "Hampi Bazaar Plaza";
+      cooperativeName = textLower.includes("stone") ? "Shilpakala Stone Carving Guild" : "Hampi Banana Fiber Handloom Collective";
+      role = textLower.includes("stone") ? "Toy Maker"
+             : textLower.includes("boat") || textLower.includes("coracle") ? "Boatman"
+             : "Weaver";
+    }
+
+    generatedProfile = {
+      name,
+      role,
+      location,
+      cooperativeName,
+      bio,
+      baseIncome,
+      impactStatus
+    };
+  }
+
+  // Ensure fully populated and safe Entrepreneur object
+  const newEntrepreneur: Entrepreneur = {
+    id: `ent-${cleanCity}-${Date.now()}`,
+    name: generatedProfile.name || "Heritage Entrepreneur",
+    role: generatedProfile.role || "Weaver",
+    location: generatedProfile.location || "Local Swadeshi Corridor",
+    avatar: defaultAvatar,
+    baseIncome: Number(generatedProfile.baseIncome) || 450,
+    dailyIncome: Number(generatedProfile.baseIncome) || 450,
+    trustScore: 90,
+    cooperativeName: generatedProfile.cooperativeName || "Swadeshi Collective",
+    impactStatus: generatedProfile.impactStatus || "Onboarded via secure voice registry.",
+    bio: generatedProfile.bio || `Preserving traditional craftsmanship. Onboarded via multilingual voice portal.`
+  };
+
+  // Add to active city list
+  if (!activeEntrepreneurs[cleanCity]) {
+    activeEntrepreneurs[cleanCity] = [];
+  }
+  
+  activeEntrepreneurs[cleanCity].push(newEntrepreneur);
+
+  console.log(`Successfully onboarded new merchant via voice: ${newEntrepreneur.name} in ${cleanCity}`);
+  res.json({
+    success: true,
+    merchant: newEntrepreneur,
+    list: activeEntrepreneurs[cleanCity]
+  });
 });
 
 app.get("/api/alerts", (req, res) => {

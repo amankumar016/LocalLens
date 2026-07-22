@@ -19,7 +19,13 @@ import {
   Sun,
   Shield,
   Send,
-  AlertCircle
+  AlertCircle,
+  ChevronDown,
+  ChevronUp,
+  Map,
+  Leaf,
+  Info,
+  Utensils
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
@@ -225,6 +231,11 @@ export default function TravelPlanner({
   const [style, setStyle] = useState<string>("Heritage & Culture");
   const [companions, setCompanions] = useState<string>("Solo");
   const [showSuggestions, setShowSuggestions] = useState<boolean>(false);
+  
+  // States for interactive itinerary view
+  const [expandedDays, setExpandedDays] = useState<Record<number, boolean>>({ 1: true });
+  const [hoveredLandmark, setHoveredLandmark] = useState<string | null>(null);
+  const [selectedLandmark, setSelectedLandmark] = useState<string | null>(null);
   
   // High-fidelity image toggle and fallback states
   const [useVectorArt, setUseVectorArt] = useState<boolean>(false);
@@ -837,34 +848,165 @@ export default function TravelPlanner({
         {/* RIGHT COLUMN: SUITE OF RECOMMENDATION RESULTS */}
         <div className="lg:col-span-8 space-y-8" id="suggestion-results-panel">
           
-          {/* 1. LOADING SCREEN STATE */}
+          {/* 1. SKELETON LOADING SCREEN STATE (AI GENERATION) */}
           {loading && (
-            <div className="bg-brand-dark p-12 rounded-[32px] border border-brand-teal/20 shadow-md text-center flex flex-col items-center justify-center min-h-[500px]">
-              <div className="relative mb-6">
-                <div className="w-16 h-16 rounded-full border-4 border-brand-rose/10 border-t-brand-rose animate-spin" />
-                <Compass className="h-6 w-6 text-brand-rose absolute top-5 left-5 animate-pulse" />
-              </div>
-              
-              <h4 className="text-lg font-bold text-white font-display mb-2">Generating Cultural Architectural Matrix</h4>
-              
-              <div className="h-5 overflow-hidden relative max-w-sm w-full mx-auto">
-                <AnimatePresence mode="wait">
-                  <motion.p 
-                    key={loadingStep}
-                    initial={{ y: 20, opacity: 0 }}
-                    animate={{ y: 0, opacity: 1 }}
-                    exit={{ y: -20, opacity: 0 }}
-                    transition={{ duration: 0.3 }}
-                    className="text-xs font-semibold text-slate-400 font-mono"
-                  >
-                    {stepsText[loadingStep]}
-                  </motion.p>
-                </AnimatePresence>
+            <div className="space-y-6">
+              {/* Header Status Bar */}
+              <div className="bg-brand-dark p-6 rounded-3xl border border-brand-teal/20 flex flex-col md:flex-row items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="relative">
+                    <div className="w-10 h-10 rounded-full border-2 border-brand-rose/25 border-t-brand-rose animate-spin" />
+                    <Compass className="h-4.5 w-4.5 text-brand-rose absolute top-2.5 left-2.5 animate-pulse" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-black font-display text-white uppercase tracking-wider">
+                      Architecting Swadeshi Corridor
+                    </h4>
+                    <span className="text-[9px] text-brand-teal font-mono uppercase tracking-widest block animate-pulse">
+                      Gemini Core 3.5 Active & Calibrating
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3 bg-brand-bg px-4 py-2.5 rounded-xl border border-brand-teal/10 w-full md:w-auto">
+                  <span className="w-2 h-2 rounded-full bg-brand-rose animate-ping shrink-0" />
+                  <div className="h-5 overflow-hidden relative w-56 text-left">
+                    <AnimatePresence mode="wait">
+                      <motion.p 
+                        key={loadingStep}
+                        initial={{ y: 15, opacity: 0 }}
+                        animate={{ y: 0, opacity: 1 }}
+                        exit={{ y: -15, opacity: 0 }}
+                        transition={{ duration: 0.25 }}
+                        className="text-[10px] font-bold text-slate-300 font-mono tracking-tight leading-normal"
+                      >
+                        {stepsText[loadingStep]}
+                      </motion.p>
+                    </AnimatePresence>
+                  </div>
+                </div>
               </div>
 
-              <div className="mt-8 flex gap-2 items-center text-[9px] font-mono text-slate-500 uppercase tracking-wider">
-                <span className="w-1.5 h-1.5 rounded-full bg-brand-teal animate-ping" />
-                <span>Gemini Core Active</span>
+              {/* Split Screen Desktop Skeletons */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                {/* Left side: Route & Timeline Cards Skeletons (lg:col-span-7) */}
+                <div className="lg:col-span-7 xl:col-span-8 space-y-6">
+                  
+                  {/* Generated Heritage Corridors Skeleton Header */}
+                  <div className="bg-brand-dark p-5 rounded-3xl border border-brand-teal/15 space-y-4">
+                    <div className="h-4 bg-slate-800 rounded w-1/3 animate-pulse" />
+                    
+                    {/* Pulsing Option Skeletons */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {[1, 2].map((i) => (
+                        <div key={i} className="p-4 bg-brand-bg/30 rounded-2xl border border-brand-teal/10 space-y-3 animate-pulse">
+                          <div className="flex justify-between">
+                            <div className="h-3 bg-slate-800 rounded w-1/4" />
+                            <div className="h-4 bg-slate-800 rounded-full w-12" />
+                          </div>
+                          <div className="h-4 bg-slate-700 rounded w-2/3" />
+                          <div className="space-y-1.5">
+                            <div className="h-2.5 bg-slate-800 rounded w-full" />
+                            <div className="h-2.5 bg-slate-800 rounded w-5/6" />
+                          </div>
+                          <div className="flex justify-between items-center pt-2 border-t border-brand-teal/5">
+                            <div className="h-3 bg-slate-800 rounded w-1/3" />
+                            <div className="flex gap-2">
+                              <div className="h-5 bg-slate-800 rounded w-12" />
+                              <div className="h-5 bg-slate-700 rounded w-12" />
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Day Timeline Route Cards Skeleton */}
+                  <div className="bg-brand-dark p-5 rounded-3xl border border-brand-teal/15 space-y-6">
+                    <div className="flex items-center justify-between border-b border-brand-teal/10 pb-3">
+                      <div className="h-4 bg-slate-800 rounded w-1/4 animate-pulse" />
+                      <div className="h-4 bg-slate-800 rounded w-1/6 animate-pulse" />
+                    </div>
+
+                    {/* Timeline vertical bar & dots */}
+                    <div className="space-y-6 relative before:absolute before:top-4 before:bottom-4 before:left-3.5 before:w-0.5 before:bg-slate-800/80 pl-10">
+                      {[1, 2].map((i) => (
+                        <div key={i} className="space-y-3 relative">
+                          {/* Circle Day Marker */}
+                          <div className="absolute top-0.5 -left-10 w-6 h-6 rounded-full bg-slate-800 border-2 border-slate-700 animate-pulse flex items-center justify-center text-[8px] font-mono font-bold text-slate-500">
+                            D{i}
+                          </div>
+
+                          <div className="bg-brand-bg/25 p-4 rounded-2xl border border-brand-teal/5 space-y-4 animate-pulse">
+                            <div className="h-4 bg-slate-800 rounded w-1/2" />
+                            
+                            {/* Three columns morning/afternoon/evening skeleton */}
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                              {[1, 2, 3].map((j) => (
+                                <div key={j} className="p-2.5 bg-brand-dark/20 rounded-xl border border-brand-teal/5 space-y-2">
+                                  <div className="h-2.5 bg-slate-800 rounded w-1/3" />
+                                  <div className="space-y-1">
+                                    <div className="h-2 bg-slate-800 rounded w-full" />
+                                    <div className="h-2 bg-slate-800 rounded w-5/6" />
+                                    <div className="h-2 bg-slate-800 rounded w-4/6" />
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+
+                            {/* Food footer and Green Impact bar skeleton */}
+                            <div className="h-8 bg-brand-dark/40 rounded-xl border border-brand-teal/5" />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                </div>
+
+                {/* Right side: Topographical Scanning Radar Map (lg:col-span-5) */}
+                <div className="lg:col-span-5 xl:col-span-4 bg-brand-dark p-6 rounded-3xl border border-brand-teal/20 min-h-[450px] relative overflow-hidden flex flex-col justify-between">
+                  {/* Glowing Radar Mesh Grid background */}
+                  <div className="absolute inset-0 bg-[linear-gradient(rgba(18,34,35,0.8)_1px,transparent_1px),linear-gradient(90deg,rgba(18,34,35,0.8)_1px,transparent_1px)] bg-[size:24px_24px] opacity-25" />
+                  
+                  {/* Concentric expanding scanning rings */}
+                  <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-72 h-72 rounded-full border border-brand-teal/10 animate-ping opacity-30" />
+                  <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-48 h-48 rounded-full border border-brand-rose/5 animate-pulse" />
+                  <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-24 h-24 rounded-full border border-brand-teal/15" />
+
+                  {/* Swiveling sweep line */}
+                  <div className="absolute top-1/2 left-1/2 w-1/2 h-0.5 bg-gradient-to-r from-brand-teal/40 to-transparent origin-left rotate-45 animate-[spin_4s_linear_infinite]" />
+
+                  {/* Map Header */}
+                  <div className="relative space-y-1">
+                    <span className="text-[8.5px] font-mono font-extrabold text-brand-rose uppercase tracking-widest block">
+                      Spatial Radar Mapping
+                    </span>
+                    <h5 className="text-xs font-black font-display text-white uppercase tracking-wider">
+                      Calibrating Geographic Nodes
+                    </h5>
+                  </div>
+
+                  {/* Pulsing Landmark coordinates */}
+                  <div className="relative flex flex-col items-center justify-center my-12 py-10 space-y-4">
+                    <div className="absolute top-1/4 left-1/3 w-2 h-2 rounded-full bg-brand-teal animate-pulse" />
+                    <div className="absolute bottom-1/3 right-1/4 w-2 h-2 rounded-full bg-brand-rose animate-pulse" />
+                    <div className="absolute top-2/3 left-1/2 w-1.5 h-1.5 rounded-full bg-brand-teal/80 animate-ping" />
+                    
+                    <div className="p-3.5 bg-brand-bg/80 backdrop-blur rounded-2xl border border-brand-teal/20 text-center max-w-[200px] shadow-lg animate-bounce">
+                      <MapPin className="h-5 w-5 text-brand-rose mx-auto mb-1 animate-pulse" />
+                      <span className="text-[10px] font-mono font-black text-slate-300 uppercase tracking-wider block">
+                        Plotting Terrain
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Map Footer */}
+                  <div className="relative pt-4 border-t border-brand-teal/10 text-[9px] font-mono text-slate-500 uppercase tracking-widest flex items-center justify-between">
+                    <span>Grid: 24-B / Swadeshi</span>
+                    <span className="animate-pulse text-brand-teal font-extrabold">Locking Coordinates...</span>
+                  </div>
+                </div>
               </div>
             </div>
           )}
@@ -1104,6 +1246,81 @@ export default function TravelPlanner({
                       ))}
                     </div>
 
+                    {/* Swadeshi Green Impact Tracker Progress Bar */}
+                    {(() => {
+                      const stayCost = sug.expenseBreakdown.stay || 0;
+                      const transportCost = sug.expenseBreakdown.transport || 0;
+                      const foodCost = sug.expenseBreakdown.food || 0;
+                      const activitiesCost = sug.expenseBreakdown.activities || 0;
+
+                      // Dynamic direct local infusion calculations based on Swadeshi policies
+                      const localArtisanInfusion = Math.round(activitiesCost * 0.95 + stayCost * 0.1); 
+                      const ecoTransitInfusion = Math.round(transportCost * 0.90);
+                      const communityLodgingInfusion = Math.round(stayCost * 0.85);
+                      const nativeCulinaryInfusion = Math.round(foodCost * 0.92);
+
+                      const totalDirectInfusion = localArtisanInfusion + ecoTransitInfusion + communityLodgingInfusion + nativeCulinaryInfusion;
+                      const greenImpactPercentage = Math.min(96, Math.max(74, Math.round((totalDirectInfusion / sug.estimatedCost) * 100)));
+
+                      return (
+                        <div className="bg-brand-bg/60 p-4.5 rounded-2xl border border-brand-teal/20 space-y-3 shadow-md">
+                          <div className="flex justify-between items-center flex-wrap gap-2">
+                            <div className="flex items-center gap-2">
+                              <span className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                                <Leaf className="h-4.5 w-4.5 animate-pulse" />
+                              </span>
+                              <div>
+                                <span className="text-[10px] font-mono font-extrabold text-brand-teal uppercase tracking-widest block leading-tight">Swadeshi Audit Verified</span>
+                                <h4 className="text-xs font-black text-white uppercase tracking-wider">
+                                  Green Capital Local Impact
+                                </h4>
+                              </div>
+                            </div>
+                            <div className="flex items-baseline gap-1 bg-brand-dark px-3 py-1.5 rounded-xl border border-brand-teal/15">
+                              <span className="text-sm font-mono font-black text-emerald-400">{greenImpactPercentage}%</span>
+                              <span className="text-[8.5px] font-mono text-slate-400 uppercase tracking-wider">Supports Locals</span>
+                            </div>
+                          </div>
+
+                          {/* Pulsing Vibrant Progress Bar */}
+                          <div className="space-y-1.5">
+                            <div className="w-full bg-brand-dark/80 h-3 rounded-full overflow-hidden p-0.5 border border-brand-teal/10 relative">
+                              <div 
+                                className="bg-gradient-to-r from-emerald-500 via-emerald-400 to-teal-400 h-full rounded-full transition-all duration-1000 relative shadow-sm"
+                                style={{ width: `${greenImpactPercentage}%` }}
+                              >
+                                <div className="absolute right-0 top-0 w-2 h-full bg-white/40 rounded-full animate-pulse" />
+                              </div>
+                            </div>
+                            <div className="flex justify-between text-[9px] font-mono text-slate-400 leading-normal font-semibold">
+                              <span>Zero Brokerage Leakage: <strong className="text-white">{(100 - greenImpactPercentage)}% Max</strong></span>
+                              <span>Direct Infusion: <span className="text-emerald-400 font-black">₹{totalDirectInfusion.toLocaleString('en-IN')}</span></span>
+                            </div>
+                          </div>
+
+                          {/* Quick impact distribution labels */}
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 pt-1 text-[9.5px]">
+                            <div className="px-2.5 py-1.5 bg-brand-dark/30 rounded-xl border border-brand-teal/5 flex items-center justify-between">
+                              <span className="text-slate-400 font-bold">Lodging Co-ops:</span>
+                              <span className="text-white font-black font-mono">₹{communityLodgingInfusion.toLocaleString('en-IN')}</span>
+                            </div>
+                            <div className="px-2.5 py-1.5 bg-brand-dark/30 rounded-xl border border-brand-teal/5 flex items-center justify-between">
+                              <span className="text-slate-400 font-bold">Weavers/Artisans:</span>
+                              <span className="text-white font-black font-mono">₹{localArtisanInfusion.toLocaleString('en-IN')}</span>
+                            </div>
+                            <div className="px-2.5 py-1.5 bg-brand-dark/30 rounded-xl border border-brand-teal/5 flex items-center justify-between">
+                              <span className="text-slate-400 font-bold">Local Food Co:</span>
+                              <span className="text-white font-black font-mono">₹{nativeCulinaryInfusion.toLocaleString('en-IN')}</span>
+                            </div>
+                            <div className="px-2.5 py-1.5 bg-brand-dark/30 rounded-xl border border-brand-teal/5 flex items-center justify-between">
+                              <span className="text-slate-400 font-bold">Rowers/Transit:</span>
+                              <span className="text-white font-black font-mono">₹{ecoTransitInfusion.toLocaleString('en-IN')}</span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()}
+
                     {/* CIVIC SAFETY SENTINEL SECTION */}
                     {sug.safetyScore !== undefined && (
                       <div className="bg-brand-bg/60 p-4.5 rounded-2xl border border-brand-teal/15 flex flex-col md:flex-row gap-4 items-start md:items-center">
@@ -1247,86 +1464,465 @@ export default function TravelPlanner({
                     {/* TAB CONTENT MODULES */}
                     <div>
                       
-                      {/* TAB: DAY BY DAY ITINERARY (VERTICAL TIMELINE) */}
-                      {activeResultTab === 'itinerary' && (
-                        <div className="space-y-6 pt-2">
-                          <div className="space-y-8 relative before:absolute before:top-4 before:bottom-4 before:left-3.5 before:w-0.5 before:bg-brand-teal/15">
-                            {sug.itinerary.map((dayItem) => (
-                              <div key={dayItem.day} className="relative pl-10 space-y-3">
-                                
-                                {/* Day number ring marker */}
-                                <div className="absolute top-0.5 left-0.5 w-6 h-6 rounded-full bg-brand-dark border-2 border-brand-rose flex items-center justify-center text-brand-rose text-[10px] font-mono font-black">
-                                  {dayItem.day}
-                                </div>
+                      {/* TAB: DAY BY DAY ITINERARY (VERTICAL TIMELINE - SPLIT SCREEN DESKTOP LAYOUT) */}
+                      {activeResultTab === 'itinerary' && (() => {
+                        // 1. Defined local landmarks database for high-fidelity maps
+                        const cityLandmarks: Record<string, { name: string; x: number; y: number; desc: string; type: 'artisan' | 'sight' | 'eatery' }[]> = {
+                          varanasi: [
+                            { name: "Dashashwamedh Ghat", x: 45, y: 65, desc: "Fabled evening Ganga Aarti & boat rower cooperative", type: 'sight' },
+                            { name: "Kashi Vishwanath Corridor", x: 40, y: 50, desc: "Ancient spiritual heart & handloom silk district", type: 'sight' },
+                            { name: "Madanpura Weavers Co-op", x: 65, y: 40, desc: "Zero-markup master weaver handloom studios", type: 'artisan' },
+                            { name: "Assi Clay Pottery Guild", x: 50, y: 85, desc: "Traditional terracotta throwing workshop & chai stalls", type: 'artisan' },
+                            { name: "Sarnath Deer Park Corridor", x: 30, y: 20, desc: "Peaceful Buddhist stupas & stone carving ateliers", type: 'sight' }
+                          ],
+                          jaipur: [
+                            { name: "Hawa Mahal (Palace of Winds)", x: 50, y: 45, desc: "Stunning display architecture & block print guilds", type: 'sight' },
+                            { name: "Amber Fort & Shila Devi", x: 40, y: 22, desc: "Glorious hilltop palace and low-emission shared rides", type: 'sight' },
+                            { name: "Johari Bazaar Gem & Textile Guild", x: 62, y: 55, desc: "Vibrant ancient merchant lanes, bandhani textiles", type: 'artisan' },
+                            { name: "Sanganer Blue Pottery Atelier", x: 60, y: 82, desc: "Eco-friendly natural clay artisan throwing kilns", type: 'artisan' },
+                            { name: "Laxmi Misthan Bhandar", x: 48, y: 65, desc: "Legendary local culinary heritage of sweet ghewar", type: 'eatery' }
+                          ],
+                          kochi: [
+                            { name: "Fort Kochi Fishing Nets", x: 35, y: 25, desc: "Iconic Chinese cantilever net fisherman co-op", type: 'sight' },
+                            { name: "Jew Town & Mattancherry Palace", x: 52, y: 50, desc: "Spice trading houses & wood carving workshops", type: 'artisan' },
+                            { name: "Kumbalangi Eco-tourism Village", x: 65, y: 80, desc: "Crab farming, coir weaving, and organic lunch", type: 'artisan' },
+                            { name: "Vypeen Coir & Fiber Weavers", x: 28, y: 15, desc: "Local women-led coconut husk weaving looms", type: 'artisan' },
+                            { name: "Fort Kochi Seafood Stalls", x: 32, y: 32, desc: "Fresh catch direct buy & local pan-fry grills", type: 'eatery' }
+                          ],
+                          hampi: [
+                            { name: "Virupaksha Temple Compound", x: 45, y: 45, desc: "Towering ancient active sanctuary on the Tungabhadra", type: 'sight' },
+                            { name: "Vittala Temple Stone Chariot", x: 68, y: 40, desc: "Architectural acoustic pillars and chariot carving", type: 'sight' },
+                            { name: "Anegundi Handloom & Crafts", x: 72, y: 18, desc: "Banana fiber crafts & handloom weaving cooperatives", type: 'artisan' },
+                            { name: "Lotus Mahal & Royal Stables", x: 40, y: 72, desc: "Beautiful indo-islamic arches & royal water basins", type: 'sight' },
+                            { name: "Sanapur Lake Coracle Station", x: 32, y: 22, desc: "Traditional circular coracle rowers association", type: 'sight' }
+                          ]
+                        };
 
-                                <div className="bg-brand-bg/40 p-4 rounded-2xl border border-brand-teal/10 space-y-3.5">
-                                  <h4 className="text-xs font-black font-display text-white uppercase tracking-wider border-b border-brand-teal/5 pb-2">
-                                    {dayItem.title}
-                                  </h4>
+                        // 2. Procedural landmark generator for dynamic destinations
+                        const getDynamicLandmarks = (itinerary: typeof sug.itinerary) => {
+                          const list: { name: string; x: number; y: number; desc: string; type: 'artisan' | 'sight' | 'eatery' }[] = [];
+                          const coordinates = [
+                            { x: 35, y: 30 },
+                            { x: 65, y: 45 },
+                            { x: 45, y: 75 },
+                            { x: 55, y: 20 },
+                            { x: 72, y: 70 }
+                          ];
+                          itinerary.forEach((day, i) => {
+                            const coord = coordinates[i % coordinates.length];
+                            let name = day.title ? day.title.split(":")[0] : `Day ${day.day} Landmark`;
+                            if (name.length > 28) name = name.substring(0, 25) + "...";
+                            let type: 'artisan' | 'sight' | 'eatery' = 'sight';
+                            const low = (day.morning + " " + day.afternoon + " " + day.evening).toLowerCase();
+                            if (low.includes("weaver") || low.includes("artisan") || low.includes("potter") || low.includes("shop")) {
+                              type = 'artisan';
+                            } else if (low.includes("food") || low.includes("eatery") || low.includes("cafe") || low.includes("lunch")) {
+                              type = 'eatery';
+                            }
+                            list.push({
+                              name,
+                              x: coord.x,
+                              y: coord.y,
+                              desc: `Heritage nodes matching your custom Day ${day.day} corridor`,
+                              type
+                            });
+                          });
+                          return list;
+                        };
 
-                                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
-                                    <div className="space-y-1 bg-brand-dark/30 p-2.5 rounded-xl border border-brand-teal/5">
-                                      <span className="text-[8.5px] font-mono font-extrabold uppercase tracking-widest text-brand-rose flex items-center gap-1">
-                                        <Sun className="h-3 w-3 text-brand-rose" />
-                                        Morning
-                                      </span>
-                                      <p className="text-[11px] text-slate-300 leading-normal">{dayItem.morning}</p>
-                                    </div>
+                        // 3. Dynamic category tag generation based on activity analysis
+                        const getCategoryTags = (text: string, title?: string, recommendedFood?: string) => {
+                          const tags: { label: string; style: string }[] = [];
+                          const low = (text + " " + (title || "") + " " + (recommendedFood || "")).toLowerCase();
+                          
+                          if (low.includes("weaver") || low.includes("artisan") || low.includes("potter") || low.includes("craft") || low.includes("handloom") || low.includes("shopping") || low.includes("workshop") || low.includes("cooperative") || low.includes("saree") || low.includes("textile")) {
+                            tags.push({ label: "Verified Local Artisan", style: "border-emerald-500/30 text-emerald-400 bg-emerald-500/5 hover:bg-emerald-500/10" });
+                          }
+                          if (low.includes("food") || low.includes("culinary") || low.includes("bite") || low.includes("cuisine") || low.includes("eatery") || low.includes("restaurant") || low.includes("café") || low.includes("chai") || low.includes("tea") || low.includes("snack") || low.includes("kulfi") || low.includes("chaat") || low.includes("lassi") || low.includes("bite")) {
+                            tags.push({ label: "Budget Eatery", style: "border-amber-500/30 text-amber-400 bg-amber-500/5 hover:bg-amber-500/10" });
+                          }
+                          if (low.includes("ferry") || low.includes("boat") || low.includes("rickshaw") || low.includes("walk") || low.includes("bicycle") || low.includes("coracle") || low.includes("shuttle")) {
+                            tags.push({ label: "Low-Emission Transit", style: "border-brand-teal/30 text-brand-teal bg-brand-teal/5" });
+                          }
+                          if (low.includes("temple") || low.includes("palace") || low.includes("fort") || low.includes("monument") || low.includes("heritage") || low.includes("ghat")) {
+                            tags.push({ label: "Cultural Heritage", style: "border-purple-500/30 text-purple-400 bg-purple-500/5 hover:bg-purple-500/10" });
+                          }
+                          
+                          if (tags.length === 0) {
+                            tags.push({ label: "Eco-Friendly Route", style: "border-brand-teal/30 text-brand-teal bg-brand-teal/5" });
+                          }
+                          if (tags.length < 2) {
+                            tags.push({ label: "Community Owned", style: "border-blue-500/30 text-blue-400 bg-blue-500/5" });
+                          }
+                          return tags;
+                        };
 
-                                    <div className="space-y-1 bg-brand-dark/30 p-2.5 rounded-xl border border-brand-teal/5">
-                                      <span className="text-[8.5px] font-mono font-extrabold uppercase tracking-widest text-brand-rose flex items-center gap-1">
-                                        <Sun className="h-3 w-3 text-amber-500 rotate-90" />
-                                        Afternoon
-                                      </span>
-                                      <p className="text-[11px] text-slate-300 leading-normal">{dayItem.afternoon}</p>
-                                    </div>
+                        const matchedCityKey = sug.destinationName.toLowerCase().includes("varanasi") 
+                          ? "varanasi" 
+                          : sug.destinationName.toLowerCase().includes("jaipur") 
+                            ? "jaipur" 
+                            : sug.destinationName.toLowerCase().includes("kochi") || sug.destinationName.toLowerCase().includes("kerala") 
+                              ? "kochi" 
+                              : sug.destinationName.toLowerCase().includes("hampi") 
+                                ? "hampi" 
+                                : "dynamic";
 
-                                    <div className="space-y-1 bg-brand-dark/30 p-2.5 rounded-xl border border-brand-teal/5">
-                                      <span className="text-[8.5px] font-mono font-extrabold uppercase tracking-widest text-brand-rose flex items-center gap-1">
-                                        <Clock className="h-3 w-3 text-slate-400" />
-                                        Evening
-                                      </span>
-                                      <p className="text-[11px] text-slate-300 leading-normal">{dayItem.evening}</p>
-                                    </div>
-                                  </div>
+                        const landmarks = matchedCityKey === "dynamic" 
+                          ? getDynamicLandmarks(sug.itinerary) 
+                          : (cityLandmarks[matchedCityKey] || getDynamicLandmarks(sug.itinerary));
 
-                                  {/* Day Recommended food footer */}
-                                  <div className="flex items-center gap-2 bg-brand-dark/50 px-3.5 py-2.5 rounded-xl border border-brand-teal/5 text-xs text-slate-300 font-semibold">
-                                    <Coffee className="h-3.5 w-3.5 text-brand-teal shrink-0" />
-                                    <span>
-                                      <strong className="text-brand-teal">Recommended Local Bite:</strong> {dayItem.recommendedFood}
-                                    </span>
-                                  </div>
-
-                                  {/* Dynamic Surge Pricing Prevention Warning (BigQuery ML forecast) */}
-                                  <div className="p-3 bg-brand-rose/10 rounded-xl border border-brand-rose/15 flex items-start gap-2.5 text-slate-300 mt-2">
-                                    <AlertCircle className="h-4 w-4 text-brand-rose shrink-0 mt-0.5 animate-pulse" />
-                                    <div className="space-y-0.5">
-                                      <span className="text-brand-rose font-black text-[9px] font-mono tracking-wider uppercase block">BigQuery ML Peak Congestion Forecast</span>
-                                      <p className="text-[10px] leading-relaxed text-slate-300 font-semibold">
-                                        {sug.destinationName.toLowerCase().includes("varanasi") ? (
-                                          dayItem.day === 1 
-                                            ? "Visiting Dashashwamedh Ghat between 5 PM–8 PM might incur surged boat-ride rates; try 10 AM or early morning for 20% savings."
-                                            : "Madanpura weaver lanes peak between 2 PM–4 PM. Visit at 10 AM for quieter exploration and 15% transit savings."
-                                        ) : sug.destinationName.toLowerCase().includes("jaipur") ? (
-                                          dayItem.day === 1 
-                                            ? "Johari Bazaar & Palace route predicted peak congestion between 1 PM–3 PM. Auto rates surged +25%. Schedule at 10 AM for optimal savings."
-                                            : "Amber Palace Gateway transit peaks 12 PM–2 PM. Travel early or utilize low-emission state shared shuttles."
-                                        ) : sug.destinationName.toLowerCase().includes("kochi") ? (
-                                          "Fort Kochi ferries and spice corridors peak between 2 PM–5 PM (+20% wait times). Schedule at 9:30 AM for a smoother trip."
-                                        ) : (
-                                          "Central artisan hubs experience peak foot traffic between 2 PM–4 PM. Visit in the morning to save up to 20% on local transit."
-                                        )}
-                                      </p>
-                                    </div>
-                                  </div>
-                                </div>
-
+                        return (
+                          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 pt-4 items-start">
+                            
+                            {/* LEFT SIDE: COLLAPSIBLE DAY TIMELINE CARDS */}
+                            <div className="lg:col-span-7 xl:col-span-8 space-y-5">
+                              <div className="flex items-center justify-between border-b border-brand-teal/10 pb-3">
+                                <span className="text-[10px] font-mono font-black text-slate-400 uppercase tracking-widest">
+                                  Corridor Progression Sequence
+                                </span>
+                                <span className="text-[10px] font-mono font-black text-brand-rose uppercase tracking-widest animate-pulse">
+                                  Click Card to Toggle View
+                                </span>
                               </div>
-                            ))}
+
+                              <div className="space-y-5 relative before:absolute before:top-4 before:bottom-4 before:left-3.5 before:w-0.5 before:bg-brand-teal/15 pl-10">
+                                {sug.itinerary.map((dayItem) => {
+                                  const isExpanded = expandedDays[dayItem.day] !== false;
+                                  const dayTags = getCategoryTags(dayItem.morning + " " + dayItem.afternoon + " " + dayItem.evening, dayItem.title, dayItem.recommendedFood);
+
+                                  return (
+                                    <div key={dayItem.day} className="relative space-y-2">
+                                      
+                                      {/* Vertical timeline bubble */}
+                                      <div 
+                                        className={`absolute top-0.5 -left-10 w-7 h-7 rounded-full flex items-center justify-center font-mono font-black border-2 transition-all ${
+                                          isExpanded 
+                                            ? "bg-brand-dark border-brand-rose text-brand-rose scale-110 shadow-lg" 
+                                            : "bg-brand-bg border-slate-600 text-slate-400"
+                                        }`}
+                                      >
+                                        D{dayItem.day}
+                                      </div>
+
+                                      {/* Collapsible Card Main Container */}
+                                      <div className="bg-brand-bg/40 border border-brand-teal/10 rounded-2xl overflow-hidden transition-all duration-300 hover:border-brand-teal/25 shadow-md">
+                                        
+                                        {/* Header Row */}
+                                        <button
+                                          onClick={() => {
+                                            setExpandedDays(prev => ({
+                                              ...prev,
+                                              [dayItem.day]: !isExpanded
+                                            }));
+                                          }}
+                                          className="w-full text-left p-4 flex items-center justify-between gap-4 bg-brand-bg/20 hover:bg-brand-bg/40 transition-colors cursor-pointer"
+                                        >
+                                          <div className="flex-1 min-w-0">
+                                            <span className="text-[9px] font-mono font-black text-brand-teal uppercase tracking-widest block mb-0.5">
+                                              Day {dayItem.day} Itinerary Corridor
+                                            </span>
+                                            <h4 className="text-sm font-black font-display text-white uppercase tracking-tight leading-tight truncate">
+                                              {dayItem.title}
+                                            </h4>
+                                          </div>
+                                          <div className="flex items-center gap-3 shrink-0">
+                                            <div className="hidden sm:flex flex-wrap gap-1.5 justify-end">
+                                              {dayTags.slice(0, 2).map((tag, tIdx) => (
+                                                <span key={tIdx} className={`px-2 py-0.5 text-[8px] font-mono font-bold border rounded ${tag.style.split(' ')[0]}`}>
+                                                  {tag.label}
+                                                </span>
+                                              ))}
+                                            </div>
+                                            {isExpanded ? (
+                                              <ChevronUp className="h-4.5 w-4.5 text-brand-rose" />
+                                            ) : (
+                                              <ChevronDown className="h-4.5 w-4.5 text-slate-400" />
+                                            )}
+                                          </div>
+                                        </button>
+
+                                        {/* Collapsed view micro summary row */}
+                                        {!isExpanded && (
+                                          <div className="px-4 pb-4 pt-1 flex items-center justify-between gap-4">
+                                            <p className="text-[10.5px] text-slate-400 leading-normal font-semibold italic truncate max-w-lg">
+                                              Morning: {dayItem.morning.substring(0, 70)}...
+                                            </p>
+                                            <span className="text-[9px] text-brand-teal font-mono font-bold shrink-0">
+                                              + {dayItem.recommendedFood ? "Local Bite" : "Details"}
+                                            </span>
+                                          </div>
+                                        )}
+
+                                        {/* Expanded Detailed Content Panel */}
+                                        {isExpanded && (
+                                          <div className="p-4 pt-2 space-y-4 border-t border-brand-teal/5 animate-fade-in">
+                                            
+                                            {/* Category badges for the entire day */}
+                                            <div className="flex flex-wrap gap-2 pb-1">
+                                              {dayTags.map((tag, tIdx) => (
+                                                <span 
+                                                  key={tIdx} 
+                                                  className={`px-2.5 py-1 text-[9.5px] font-bold border rounded-full transition-colors flex items-center gap-1 ${tag.style}`}
+                                                >
+                                                  <span className="w-1 h-1 rounded-full bg-current" />
+                                                  {tag.label}
+                                                </span>
+                                              ))}
+                                            </div>
+
+                                            {/* 3 columns morning/afternoon/evening display */}
+                                            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs pt-1">
+                                              <div 
+                                                onMouseEnter={() => setHoveredLandmark(dayItem.morning)}
+                                                onMouseLeave={() => setHoveredLandmark(null)}
+                                                className="space-y-1 bg-brand-dark/30 hover:bg-brand-dark/50 p-3 rounded-xl border border-brand-teal/5 transition-all group"
+                                              >
+                                                <span className="text-[8.5px] font-mono font-black uppercase tracking-widest text-brand-rose flex items-center gap-1.5">
+                                                  <Sun className="h-3.5 w-3.5 text-brand-rose group-hover:rotate-45 transition-transform" />
+                                                  Morning Hub
+                                                </span>
+                                                <p className="text-[11px] text-slate-200 leading-normal font-semibold">{dayItem.morning}</p>
+                                              </div>
+
+                                              <div 
+                                                onMouseEnter={() => setHoveredLandmark(dayItem.afternoon)}
+                                                onMouseLeave={() => setHoveredLandmark(null)}
+                                                className="space-y-1 bg-brand-dark/30 hover:bg-brand-dark/50 p-3 rounded-xl border border-brand-teal/5 transition-all group"
+                                              >
+                                                <span className="text-[8.5px] font-mono font-black uppercase tracking-widest text-brand-rose flex items-center gap-1.5">
+                                                  <Sun className="h-3.5 w-3.5 text-amber-500 rotate-90" />
+                                                  Afternoon Tour
+                                                </span>
+                                                <p className="text-[11px] text-slate-200 leading-normal font-semibold">{dayItem.afternoon}</p>
+                                              </div>
+
+                                              <div 
+                                                onMouseEnter={() => setHoveredLandmark(dayItem.evening)}
+                                                onMouseLeave={() => setHoveredLandmark(null)}
+                                                className="space-y-1 bg-brand-dark/30 hover:bg-brand-dark/50 p-3 rounded-xl border border-brand-teal/5 transition-all group"
+                                              >
+                                                <span className="text-[8.5px] font-mono font-black uppercase tracking-widest text-brand-rose flex items-center gap-1.5">
+                                                  <Clock className="h-3.5 w-3.5 text-purple-400" />
+                                                  Evening Aarti
+                                                </span>
+                                                <p className="text-[11px] text-slate-200 leading-normal font-semibold">{dayItem.evening}</p>
+                                              </div>
+                                            </div>
+
+                                            {/* Local Culinary Bite */}
+                                            {dayItem.recommendedFood && (
+                                              <div className="flex items-center gap-2.5 bg-brand-dark/50 px-3.5 py-2.5 rounded-xl border border-brand-teal/5 text-xs text-slate-300 font-semibold hover:border-amber-500/20 transition-colors">
+                                                <Utensils className="h-4 w-4 text-amber-400 shrink-0" />
+                                                <span>
+                                                  <strong className="text-brand-teal">Recommended Local Bite:</strong> {dayItem.recommendedFood}
+                                                </span>
+                                              </div>
+                                            )}
+
+                                            {/* Surge Pricing / Peak congestion warnings */}
+                                            <div className="p-3 bg-brand-rose/10 rounded-xl border border-brand-rose/15 flex items-start gap-2.5 text-slate-300">
+                                              <AlertCircle className="h-4 w-4 text-brand-rose shrink-0 mt-0.5 animate-pulse" />
+                                              <div className="space-y-0.5">
+                                                <span className="text-brand-rose font-black text-[9px] font-mono tracking-wider uppercase block">BigQuery ML Peak Congestion Forecast</span>
+                                                <p className="text-[10px] leading-relaxed text-slate-300 font-semibold">
+                                                  {sug.destinationName.toLowerCase().includes("varanasi") ? (
+                                                    dayItem.day === 1 
+                                                      ? "Visiting Dashashwamedh Ghat between 5 PM–8 PM might incur surged boat-ride rates; try 10 AM or early morning for 20% savings."
+                                                      : "Madanpura weaver lanes peak between 2 PM–4 PM. Visit at 10 AM for quieter exploration and 15% transit savings."
+                                                  ) : sug.destinationName.toLowerCase().includes("jaipur") ? (
+                                                    dayItem.day === 1 
+                                                      ? "Johari Bazaar & Palace route predicted peak congestion between 1 PM–3 PM. Auto rates surged +25%. Schedule at 10 AM for optimal savings."
+                                                      : "Amber Palace Gateway transit peaks 12 PM–2 PM. Travel early or utilize low-emission state shared shuttles."
+                                                  ) : sug.destinationName.toLowerCase().includes("kochi") ? (
+                                                    "Fort Kochi ferries and spice corridors peak between 2 PM–5 PM (+20% wait times). Schedule at 9:30 AM for a smoother trip."
+                                                  ) : (
+                                                    "Central artisan hubs experience peak foot traffic between 2 PM–4 PM. Visit in the morning to save up to 20% on local transit."
+                                                  )}
+                                                </p>
+                                              </div>
+                                            </div>
+
+                                          </div>
+                                        )}
+
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+
+                            {/* RIGHT SIDE: INTERACTIVE HERITAGE SPATIAL RADAR MAP */}
+                            <div className="lg:col-span-5 xl:col-span-4 lg:sticky lg:top-6 bg-brand-dark p-5 rounded-3xl border border-brand-teal/20 overflow-hidden relative shadow-2xl min-h-[500px] flex flex-col justify-between">
+                              
+                              {/* Blueprint topological grids */}
+                              <div className="absolute inset-0 bg-[linear-gradient(rgba(20,184,166,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(20,184,166,0.03)_1px,transparent_1px)] bg-[size:16px_16px]" />
+                              
+                              {/* Decorative Concentric radar circles */}
+                              <div className="absolute top-[48%] left-[50%] -translate-x-1/2 -translate-y-1/2 w-80 h-80 rounded-full border border-brand-teal/5" />
+                              <div className="absolute top-[48%] left-[50%] -translate-x-1/2 -translate-y-1/2 w-52 h-52 rounded-full border border-brand-teal/5 border-dashed" />
+                              <div className="absolute top-[48%] left-[50%] -translate-x-1/2 -translate-y-1/2 w-28 h-28 rounded-full border border-brand-teal/5" />
+
+                              {/* Map Header */}
+                              <div className="relative border-b border-brand-teal/10 pb-3 flex justify-between items-center bg-brand-dark/90 backdrop-blur-xs p-1 rounded-xl">
+                                <div className="space-y-0.5">
+                                  <span className="text-[8.5px] font-mono font-extrabold text-brand-rose uppercase tracking-widest block">
+                                    Autonomous Heritage Telemetry
+                                  </span>
+                                  <h5 className="text-xs font-black font-display text-white uppercase tracking-wider">
+                                    Spatial Radar Map
+                                  </h5>
+                                </div>
+                                <span className="text-[8.5px] font-mono font-black text-brand-teal bg-brand-teal/10 px-2 py-0.5 border border-brand-teal/20 rounded">
+                                  Active: {matchedCityKey.toUpperCase()}
+                                </span>
+                              </div>
+
+                              {/* Map Canvas / Plotting Area */}
+                              <div className="relative flex-1 min-h-[280px] my-4 bg-brand-bg/25 rounded-2xl border border-brand-teal/10 overflow-hidden shadow-inner flex items-center justify-center">
+                                
+                                {/* Topological design flourishes (e.g. river flow or fort boundary lines for high fidelity) */}
+                                {matchedCityKey === "varanasi" && (
+                                  <svg className="absolute inset-0 w-full h-full opacity-20 pointer-events-none" viewBox="0 0 100 100">
+                                    {/* Varanasi Ganga River bend curving south to north */}
+                                    <path d="M 15,100 C 35,90 60,65 55,0" fill="none" stroke="#14B8A6" strokeWidth="12" strokeLinecap="round" />
+                                    <path d="M 15,100 C 35,90 60,65 55,0" fill="none" stroke="#0D9488" strokeWidth="1" strokeDasharray="3,3" />
+                                  </svg>
+                                )}
+                                {matchedCityKey === "jaipur" && (
+                                  <svg className="absolute inset-0 w-full h-full opacity-15 pointer-events-none" viewBox="0 0 100 100">
+                                    {/* Jaipur Octagonal walled city bounds */}
+                                    <polygon points="30,20 70,20 85,50 70,80 30,80 15,50" fill="none" stroke="#E64833" strokeWidth="2" strokeDasharray="4,4" />
+                                  </svg>
+                                )}
+                                {matchedCityKey === "kochi" && (
+                                  <svg className="absolute inset-0 w-full h-full opacity-25 pointer-events-none" viewBox="0 0 100 100">
+                                    {/* Kochi backwaters islands */}
+                                    <circle cx="20" cy="30" r="15" fill="#1e3a8a" opacity="0.3" />
+                                    <circle cx="75" cy="70" r="22" fill="#1e3a8a" opacity="0.3" />
+                                    <path d="M 10,60 Q 40,40 90,80" fill="none" stroke="#14B8A6" strokeWidth="4" />
+                                  </svg>
+                                )}
+
+                                {/* Connected Dotted Itinerary Route Path */}
+                                <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 100 100" preserveAspectRatio="none">
+                                  {landmarks.length > 1 && (
+                                    <path
+                                      d={`M ${landmarks.map(l => `${l.x},${l.y}`).join(' L ')}`}
+                                      fill="none"
+                                      stroke="url(#map-route-gradient)"
+                                      strokeWidth="1.2"
+                                      strokeDasharray="4,4"
+                                      className="animate-pulse"
+                                    />
+                                  )}
+                                  <defs>
+                                    <linearGradient id="map-route-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                                      <stop offset="0%" stopColor="#FB923C" />
+                                      <stop offset="100%" stopColor="#14B8A6" />
+                                    </linearGradient>
+                                  </defs>
+                                </svg>
+
+                                {/* Landmarks Coordinate Markers */}
+                                {landmarks.map((landmark, lIdx) => {
+                                  // Determine if this landmark is currently highlighted (via hover on timeline or hover on marker)
+                                  const matchesHoverState = 
+                                    hoveredLandmark?.toLowerCase().includes(landmark.name.toLowerCase().split(' ')[0]) ||
+                                    selectedLandmark === landmark.name;
+
+                                  return (
+                                    <button
+                                      key={lIdx}
+                                      onClick={() => setSelectedLandmark(landmark.name)}
+                                      onMouseEnter={() => setSelectedLandmark(landmark.name)}
+                                      className="absolute -translate-x-1/2 -translate-y-1/2 cursor-pointer transition-all duration-300 group focus:outline-none"
+                                      style={{ left: `${landmark.x}%`, top: `${landmark.y}%`, zIndex: matchesHoverState ? 40 : 20 }}
+                                    >
+                                      {/* Glowing aura */}
+                                      <span className={`absolute -inset-3 rounded-full transition-all duration-300 opacity-60 ${
+                                        matchesHoverState 
+                                          ? "bg-brand-rose/25 scale-125 animate-ping" 
+                                          : "bg-brand-teal/5 group-hover:bg-brand-teal/20 scale-100"
+                                      }`} />
+
+                                      {/* Outer indicator circle */}
+                                      <span className={`flex items-center justify-center w-6 h-6 rounded-full border transition-all ${
+                                        matchesHoverState 
+                                          ? "bg-brand-rose border-brand-rose text-brand-deep scale-125 shadow-lg shadow-brand-rose/30" 
+                                          : landmark.type === 'artisan'
+                                            ? "bg-brand-dark border-emerald-500 text-emerald-400"
+                                            : landmark.type === 'eatery'
+                                              ? "bg-brand-dark border-amber-500 text-amber-500"
+                                              : "bg-brand-dark border-brand-teal text-brand-teal"
+                                      }`}>
+                                        <MapPin className="h-3.5 w-3.5" />
+                                      </span>
+
+                                      {/* Landmark name tooltips */}
+                                      <span className={`absolute top-7 left-1/2 -translate-x-1/2 whitespace-nowrap text-[9px] font-mono font-bold px-2 py-0.5 rounded shadow-xl border transition-all ${
+                                        matchesHoverState
+                                          ? "bg-brand-rose border-brand-rose text-brand-deep opacity-100 translate-y-0"
+                                          : "bg-brand-dark border-brand-teal/20 text-slate-300 opacity-0 group-hover:opacity-100 translate-y-1"
+                                      }`}>
+                                        {landmark.name}
+                                      </span>
+                                    </button>
+                                  );
+                                })}
+
+                                {/* Dynamic Compass overlay */}
+                                <div className="absolute bottom-3 right-3 opacity-30 pointer-events-none">
+                                  <Compass className="h-10 w-10 text-brand-teal animate-[spin_60s_linear_infinite]" />
+                                </div>
+                              </div>
+
+                              {/* Interactive Selected Node Disclosure Card */}
+                              {(() => {
+                                const activeLandmark = landmarks.find(l => l.name === selectedLandmark) || landmarks[0];
+                                if (!activeLandmark) return null;
+
+                                return (
+                                  <div className="relative bg-brand-bg/90 border border-brand-teal/20 p-3.5 rounded-2xl shadow-xl space-y-2 animate-fade-in">
+                                    <div className="flex items-center justify-between gap-2">
+                                      <div className="flex items-center gap-1.5 min-w-0">
+                                        <span className={`w-2 h-2 rounded-full ${
+                                          activeLandmark.type === 'artisan' 
+                                            ? 'bg-emerald-400' 
+                                            : activeLandmark.type === 'eatery' 
+                                              ? 'bg-amber-400' 
+                                              : 'bg-brand-teal'
+                                        }`} />
+                                        <h6 className="text-[11px] font-black font-display text-white uppercase tracking-wider truncate">
+                                          {activeLandmark.name}
+                                        </h6>
+                                      </div>
+                                      <span className={`text-[8px] font-mono font-bold px-1.5 py-0.5 rounded border leading-none uppercase ${
+                                        activeLandmark.type === 'artisan' 
+                                          ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-400' 
+                                          : activeLandmark.type === 'eatery' 
+                                            ? 'border-amber-500/25 bg-amber-500/10 text-amber-400' 
+                                            : 'border-brand-teal/25 bg-brand-teal/10 text-brand-teal'
+                                      }`}>
+                                        {activeLandmark.type === 'artisan' ? 'Verified Artisan' : activeLandmark.type === 'eatery' ? 'Budget Eatery' : 'Cultural Sight'}
+                                      </span>
+                                    </div>
+                                    <p className="text-[10px] text-slate-300 leading-normal font-semibold">
+                                      {activeLandmark.desc}
+                                    </p>
+                                    <div className="flex justify-between items-center text-[8.5px] text-slate-500 font-mono border-t border-brand-teal/5 pt-1.5 uppercase tracking-wider">
+                                      <span>Direct Swadeshi Support Verified</span>
+                                      <span className="text-emerald-400 font-bold">100% Brokerage Free</span>
+                                    </div>
+                                  </div>
+                                );
+                              })()}
+
+                            </div>
+
                           </div>
-                        </div>
-                      )}
+                        );
+                      })()}
 
                       {/* TAB: LOCAL ARTISANS & CRAFTS */}
                       {activeResultTab === 'crafts' && (
