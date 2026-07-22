@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
+import { useLanguage } from "../lib/LanguageContext";
 import { 
   Compass, 
   MapPin, 
@@ -171,6 +172,7 @@ const CITY_NARRATIVES: Record<string, NarrativeSegment[]> = {
 };
 
 export default function CulturalStoryteller({ activeCity, onShowToast }: CulturalStorytellerProps) {
+  const { language, translateDynamic, t } = useLanguage();
   const cityKey = activeCity?.toLowerCase() || "varanasi";
   const baseNarratives = useMemo(() => {
     return CITY_NARRATIVES[cityKey] || CITY_NARRATIVES.varanasi;
@@ -180,6 +182,50 @@ export default function CulturalStoryteller({ activeCity, onShowToast }: Cultura
   const [selectedCategory, setSelectedCategory] = useState<"all" | "culinary" | "architecture" | "crafts" | "folklore">("all");
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [activeStory, setActiveStory] = useState<NarrativeSegment | null>(null);
+  const [translatedStory, setTranslatedStory] = useState<NarrativeSegment | null>(null);
+
+  useEffect(() => {
+    if (!activeStory) {
+      setTranslatedStory(null);
+      return;
+    }
+
+    if (language === "en") {
+      setTranslatedStory(activeStory);
+      return;
+    }
+
+    let isMounted = true;
+    const performTranslation = async () => {
+      try {
+        const [translatedTitle, translatedTranscript, translatedContext] = await Promise.all([
+          translateDynamic(activeStory.title),
+          translateDynamic(activeStory.transcript),
+          translateDynamic(activeStory.synthesizedContext)
+        ]);
+
+        if (isMounted) {
+          setTranslatedStory({
+            ...activeStory,
+            title: translatedTitle,
+            transcript: translatedTranscript,
+            synthesizedContext: translatedContext
+          });
+        }
+      } catch (err) {
+        console.error("Story translation error:", err);
+        if (isMounted) {
+          setTranslatedStory(activeStory);
+        }
+      }
+    };
+
+    performTranslation();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [activeStory, language, translateDynamic]);
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [playbackProgress, setPlaybackProgress] = useState<number>(0);
   const [ragFocus, setRagFocus] = useState<string>("Artisan Guild Traditions");
@@ -439,10 +485,10 @@ export default function CulturalStoryteller({ activeCity, onShowToast }: Cultura
                             {narrative.streetName}
                           </span>
                           <h4 className="text-[12px] font-black text-white uppercase tracking-wide group-hover:text-brand-rose transition-colors mt-1">
-                            {narrative.title}
+                            {isActive && translatedStory ? translatedStory.title : narrative.title}
                           </h4>
                           <p className="text-[10px] text-slate-300 leading-normal line-clamp-2 mt-1">
-                            "{narrative.transcript}"
+                            "{isActive && translatedStory ? translatedStory.transcript : narrative.transcript}"
                           </p>
                         </div>
 
@@ -497,7 +543,7 @@ export default function CulturalStoryteller({ activeCity, onShowToast }: Cultura
               <div className="space-y-4 animate-fade-in text-slate-300">
                 <div className="space-y-1 text-center py-2 bg-brand-bg/20 rounded-2xl border border-brand-teal/5">
                   <h4 className="text-[11px] font-black text-white uppercase tracking-wide px-2 truncate">
-                    {activeStory.title}
+                    {(translatedStory || activeStory).title}
                   </h4>
                   <span className="text-[8.5px] font-mono text-slate-400">
                     Voice of {activeStory.contributor}
@@ -546,7 +592,7 @@ export default function CulturalStoryteller({ activeCity, onShowToast }: Cultura
                     Vertex AI RAG Context Strategy:
                   </span>
                   <p className="text-[9.5px] text-slate-300 leading-normal font-medium italic">
-                    "{activeStory.synthesizedContext}"
+                    "{(translatedStory || activeStory).synthesizedContext}"
                   </p>
                 </div>
               </div>

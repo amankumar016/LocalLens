@@ -1517,6 +1517,43 @@ app.get("/api/entrepreneurs", (req, res) => {
   res.json(list);
 });
 
+app.post("/api/translate", async (req, res) => {
+  const { text, targetLanguage } = req.body;
+  if (!text) {
+    return res.status(400).json({ error: "Missing text to translate" });
+  }
+  if (!targetLanguage || targetLanguage.toLowerCase() === 'en') {
+    return res.json({ translatedText: text });
+  }
+
+  if (isGeminiAvailable()) {
+    const ai = getAI();
+    if (ai) {
+      try {
+        const prompt = `You are an expert multilingual translation engine for the Swadeshi AI Heritage Corridor platform.
+Translate the following text into the target language. The target language is identified by name or language code: "${targetLanguage}".
+Ensure the tone is respectful, professional, and authentic to the original text. Preserve any formatting, numbers, proper nouns (like name of city or persons), and specific cultural context or Indian Rupee symbols (₹).
+Do not add any explanations, introductory remarks, wrapper text, or markdown code blocks. Output ONLY the translated text.
+
+Text to translate:
+"${text}"`;
+
+        const response = await ai.models.generateContent({
+          model: "gemini-3.6-flash",
+          contents: prompt,
+        });
+
+        const translatedText = response.text ? response.text.trim() : text;
+        return res.json({ translatedText });
+      } catch (err) {
+        handleGeminiError(err, "Multilingual translation API");
+      }
+    }
+  }
+
+  return res.json({ translatedText: text });
+});
+
 app.post("/api/onboard/voice", async (req, res) => {
   const { recordedText, city, role: specifiedRole } = req.body;
   const cleanCity = (city || 'varanasi').toLowerCase();
@@ -1525,7 +1562,62 @@ app.post("/api/onboard/voice", async (req, res) => {
     return res.status(400).json({ error: "Missing spoken voice description text" });
   }
 
-  let generatedProfile: Partial<Entrepreneur> = {};
+  // Heuristic-based language detector for immediate and fallback language detection
+  const detectLanguageHeuristic = (text: string): string => {
+    const textLower = text.toLowerCase();
+    
+    // Script unicode-range checking
+    if (/[\u0D00-\u0D7F]/.test(text)) {
+      return "ml"; // Malayalam
+    }
+    if (/[\u0C80-\u0CFF]/.test(text)) {
+      return "kn"; // Kannada
+    }
+    if (/[\u0900-\u097F]/.test(text)) {
+      return "hi"; // Hindi / Devanagari (including Bhojpuri / Marwari dialects)
+    }
+    if (/[\u0B80-\u0BFF]/.test(text)) {
+      return "ta"; // Tamil
+    }
+    if (/[\u0C00-\u0C7F]/.test(text)) {
+      return "te"; // Telugu
+    }
+    if (/[\u0980-\u09FF]/.test(text)) {
+      return "bn"; // Bengali
+    }
+    if (/[\u0A80-\u0AFF]/.test(text)) {
+      return "gu"; // Gujarati
+    }
+    if (/[\u0A00-\u0A7F]/.test(text)) {
+      return "pa"; // Punjabi
+    }
+    if (/[\u3000-\u303f\u3040-\u309f\u30a0-\u30ff\uff00-\uffef\u4e00-\u9faf]/.test(text)) {
+      return "ja"; // Japanese
+    }
+
+    // Heuristics based on key preset phrases in case they are transcribed in Latin characters
+    if (textLower.includes("naam") || textLower.includes("mera naam") || textLower.includes("humar naam") || textLower.includes("mharo naam")) {
+      return "hi";
+    }
+    if (textLower.includes("ente peru") || textLower.includes("peru")) {
+      if (textLower.includes("kochi") || textLower.includes("cheenavala")) {
+        return "ml";
+      }
+    }
+    if (textLower.includes("nanna hesaru") || textLower.includes("hesaru")) {
+      return "kn";
+    }
+    
+    // Check other common presets in case they are English
+    if (textLower.includes("i am") || textLower.includes("my name is") || textLower.includes("we weave") || textLower.includes("middlemen")) {
+      return "en";
+    }
+
+    return "en"; // Default fallback
+  };
+
+  const fallbackLanguage = detectLanguageHeuristic(recordedText);
+  let generatedProfile: Partial<Entrepreneur> & { detectedLanguage?: string } = {};
 
   const avatarPool = [
     "https://images.unsplash.com/photo-1595211877493-41a4e5f236b3?auto=format&fit=crop&q=80&w=200&h=200",
@@ -1548,6 +1640,7 @@ They have recorded their voice describing their shop/craft. The transcribed text
 "${recordedText}"
 
 Your task is to analyze this multilingual spoken description, translate/transcribe it into a beautifully structured, highly authentic merchant profile card in English.
+In addition, detect the language being spoken by the user and specify its 2-letter ISO locale code.
 
 You must output a JSON object adhering exactly to this schema:
 {
@@ -1557,7 +1650,8 @@ You must output a JSON object adhering exactly to this schema:
   "cooperativeName": "An authentic, regional guild or cooperative association name (e.g. \\"Ganga Boatman Association\\", \\"Sanganer Artisans Co-op\\", \\"Malabar Coir Union\\", or \\"Hampi Fiber Handloom Collective\\")",
   "bio": "A beautifully written, highly respectful, evocative 2-3 sentence biography in English capturing the soul of their heritage craft, family tradition, or shop, as described or inferred from their voice recording.",
   "baseIncome": "A reasonable estimated daily baseline income in INR, e.g. a number between 300 and 700 based on their role",
-  "impactStatus": "A clear, concise, dignified statement of how policy standardizations (like ending commissions or rickshaw subsidies) will affect their shop (e.g. \\"Optimistic that standardized rates will end deceptive middlemen cuts.\\")"
+  "impactStatus": "A clear, concise, dignified statement of how policy standardizations (like ending commissions or rickshaw subsidies) will affect their shop (e.g. \\"Optimistic that standardized rates will end deceptive middlemen cuts.\\")",
+  "detectedLanguage": "The ISO 2-letter code of the primary language being spoken in the transcribed text. Match one of these: \\"en\\" (English), \\"hi\\" (Hindi), \\"ml\\" (Malayalam), \\"kn\\" (Kannada), \\"bn\\" (Bengali), \\"ta\\" (Tamil), \\"te\\" (Telugu), \\"mr\\" (Marathi), \\"gu\\" (Gujarati), \\"pa\\" (Punjabi), \\"es\\" (Spanish), \\"fr\\" (French), \\"de\\" (German), \\"ja\\" (Japanese). Defaults to \\"en\\" if not clearly matching any other."
 }
 
 Make sure the tone is incredibly supportive, celebrating the dignity of Indian street artisans and micro-entrepreneurs. Keep the generated information realistic and grounded. Do not output anything other than raw JSON.`;
@@ -1576,9 +1670,10 @@ Make sure the tone is incredibly supportive, celebrating the dignity of Indian s
                 cooperativeName: { type: Type.STRING },
                 bio: { type: Type.STRING },
                 baseIncome: { type: Type.NUMBER },
-                impactStatus: { type: Type.STRING }
+                impactStatus: { type: Type.STRING },
+                detectedLanguage: { type: Type.STRING }
               },
-              required: ["name", "role", "location", "cooperativeName", "bio", "baseIncome", "impactStatus"]
+              required: ["name", "role", "location", "cooperativeName", "bio", "baseIncome", "impactStatus", "detectedLanguage"]
             }
           }
         });
@@ -1675,7 +1770,8 @@ Make sure the tone is incredibly supportive, celebrating the dignity of Indian s
   res.json({
     success: true,
     merchant: newEntrepreneur,
-    list: activeEntrepreneurs[cleanCity]
+    list: activeEntrepreneurs[cleanCity],
+    detectedLanguage: generatedProfile.detectedLanguage || fallbackLanguage
   });
 });
 

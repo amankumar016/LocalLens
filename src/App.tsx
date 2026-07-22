@@ -54,6 +54,7 @@ import HeritageChatBot from "./components/HeritageChatBot";
 import TrendChart from "./components/TrendChart";
 import StakeholderDashboard from "./components/StakeholderDashboard";
 import CulturalStoryteller from "./components/CulturalStoryteller";
+import { useLanguage } from "./lib/LanguageContext";
 import { PolicyInputs, SimulationResult, Entrepreneur, CivicAlert, TrustReport } from "./types";
 import gsap from "gsap";
 import { ARTISAN_PORTFOLIOS } from "./data/portfolios";
@@ -322,9 +323,29 @@ const DEFAULT_PRESETS: Record<string, { inputsA: PolicyInputs, inputsB: PolicyIn
 };
 
 export default function App() {
+  const { language, setLanguage, translateDynamic, t } = useLanguage();
   // Global active destination state
-  const [activeCity, setActiveCity] = useState<string | null>(null);
+  const [activeCity, setActiveCity] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem("swadeshi_active_city") || null;
+    } catch {
+      return null;
+    }
+  });
   const [dynamicConfigs, setDynamicConfigs] = useState<Record<string, any>>({});
+
+  // Sync activeCity changes to localStorage
+  useEffect(() => {
+    try {
+      if (activeCity) {
+        localStorage.setItem("swadeshi_active_city", activeCity);
+      } else {
+        localStorage.removeItem("swadeshi_active_city");
+      }
+    } catch {
+      // Ignore
+    }
+  }, [activeCity]);
 
   // Dynamic Redesigned Landing Page States
   const [bannerTextIndex, setBannerTextIndex] = useState<number>(0);
@@ -351,7 +372,23 @@ export default function App() {
   };
   
   // Navigation Section State
-  const [activeTab, setActiveTab] = useState<'explore' | 'simulator' | 'compare' | 'hub' | 'navigator' | 'feeds' | 'alerts' | 'dashboard' | 'storyteller'>('explore');
+  const [activeTab, setActiveTab] = useState<'explore' | 'simulator' | 'compare' | 'hub' | 'navigator' | 'feeds' | 'alerts' | 'dashboard' | 'storyteller'>(() => {
+    try {
+      return (localStorage.getItem("swadeshi_active_tab") as any) || 'explore';
+    } catch {
+      return 'explore';
+    }
+  });
+
+  // Sync activeTab changes to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem("swadeshi_active_tab", activeTab);
+    } catch {
+      // Ignore
+    }
+  }, [activeTab]);
+
   const [compareMode, setCompareMode] = useState<'scenarios' | 'cities'>('scenarios');
 
   // Custom premium interactive states
@@ -511,6 +548,50 @@ export default function App() {
 
   // Active City Config values
   const currentCityConfig = activeCity ? (cityConfigs[activeCity as keyof typeof cityConfigs] || dynamicConfigs[activeCity]) : null;
+  const [translatedCityConfig, setTranslatedCityConfig] = useState<any>(null);
+
+  useEffect(() => {
+    if (!currentCityConfig) {
+      setTranslatedCityConfig(null);
+      return;
+    }
+
+    if (language === "en") {
+      setTranslatedCityConfig(currentCityConfig);
+      return;
+    }
+
+    let isMounted = true;
+    const performTranslation = async () => {
+      try {
+        const [translatedName, translatedTagline, translatedDesc] = await Promise.all([
+          translateDynamic(currentCityConfig.fullName),
+          translateDynamic(currentCityConfig.tagline),
+          translateDynamic(currentCityConfig.description)
+        ]);
+
+        if (isMounted) {
+          setTranslatedCityConfig({
+            ...currentCityConfig,
+            fullName: translatedName,
+            tagline: translatedTagline,
+            description: translatedDesc
+          });
+        }
+      } catch (err) {
+        console.error("City config translation error:", err);
+        if (isMounted) {
+          setTranslatedCityConfig(currentCityConfig);
+        }
+      }
+    };
+
+    performTranslation();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [currentCityConfig, language, translateDynamic]);
 
   // Export functions
   const handleExportJSON = () => {
@@ -1307,6 +1388,12 @@ export default function App() {
               setSelectedEntrepreneurId(data.merchant.id);
               setOnboardedMerchant(data.merchant);
               setIsOnboardingSuccess(true);
+              
+              if (data.detectedLanguage && data.detectedLanguage !== language) {
+                setLanguage(data.detectedLanguage);
+                showToast(`🌐 Detected Language: ${data.detectedLanguage.toUpperCase()}. Switched UI locale!`);
+              }
+              
               showToast(`🎉 Onboarded! Welcome ${data.merchant.name} to the Swadeshi micro-merchant registry.`);
             } else {
               showToast("⚠️ Standard verification declined. Please try again.");
@@ -1541,8 +1628,8 @@ export default function App() {
                 <Compass className="h-4 w-4 text-[#DA7B93] animate-spin" style={{ animationDuration: '8s' }} />
                 <span>
                   {currentCityConfig 
-                    ? `Destination Corridors: ${currentCityConfig.fullName}` 
-                    : "AI-Driven Swadeshi Destination Architect"}
+                    ? `${t("Destination Corridors: ")}${(translatedCityConfig || currentCityConfig).fullName}` 
+                    : t("AI-Driven Swadeshi Destination Architect")}
                 </span>
               </div>
 
@@ -1558,15 +1645,15 @@ export default function App() {
                   >
                     <h2 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-black tracking-tighter leading-none text-white uppercase drop-shadow-xl select-none font-sans">
                       {activeCity && currentCityConfig
-                        ? `${currentCityConfig.fullName}`
-                        : CYCLE_TEXTS[bannerTextIndex].main}
+                        ? `${(translatedCityConfig || currentCityConfig).fullName}`
+                        : t(CYCLE_TEXTS[bannerTextIndex].main)}
                     </h2>
                     <p className="text-xs sm:text-sm font-mono tracking-widest text-[#DA7B93] uppercase font-extrabold drop-shadow flex items-center justify-center lg:justify-start gap-2">
                       <span className="w-2 h-2 rounded-full bg-[#DA7B93] animate-ping shrink-0" />
                       <span>
                         {activeCity && currentCityConfig
-                          ? currentCityConfig.tagline
-                          : CYCLE_TEXTS[bannerTextIndex].sub}
+                          ? (translatedCityConfig || currentCityConfig).tagline
+                          : t(CYCLE_TEXTS[bannerTextIndex].sub)}
                       </span>
                     </p>
                   </motion.div>
@@ -1575,8 +1662,8 @@ export default function App() {
               
               <p className="text-sm md:text-base text-slate-200 leading-relaxed max-w-2xl font-medium drop-shadow-md">
                 {currentCityConfig 
-                  ? currentCityConfig.description 
-                  : "Plan authentic Indian journeys modeled around localized heritage. Specify your target budget and traveling style, and our AI Suggestions Engine will craft custom day-wise itineraries that support genuine municipal artisans and eco-operators."}
+                  ? (translatedCityConfig || currentCityConfig).description 
+                  : t("Plan authentic Indian journeys modeled around localized heritage. Specify your target budget and traveling style, and our AI Suggestions Engine will craft custom day-wise itineraries that support genuine municipal artisans and eco-operators.")}
               </p>
 
               {/* Action buttons (3D Space and Reset) */}

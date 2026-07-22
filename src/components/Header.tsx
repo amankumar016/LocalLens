@@ -1,6 +1,7 @@
 import React, { useState } from "react";
-import { Compass, Menu, X, ShieldAlert, Users, Layers, AlertTriangle, MapPin, ChevronDown, Radio, GitCompare, Search, LayoutDashboard, Volume2 } from "lucide-react";
+import { Compass, Menu, X, ShieldAlert, Users, Layers, AlertTriangle, MapPin, ChevronDown, Radio, GitCompare, Search, LayoutDashboard, Volume2, Globe } from "lucide-react";
 import { motion } from "motion/react";
+import { useLanguage } from "../lib/LanguageContext";
 
 interface HeaderProps {
   activeTab: 'explore' | 'simulator' | 'compare' | 'hub' | 'navigator' | 'feeds' | 'alerts' | 'dashboard' | 'storyteller';
@@ -89,8 +90,10 @@ export default function Header({
   onOpenReportModal,
   alertsCount 
 }: HeaderProps) {
+  const { language, setLanguage, languages, t } = useLanguage();
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [isCityDropdownOpen, setIsCityDropdownOpen] = useState(false);
+  const [isLangDropdownOpen, setIsLangDropdownOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [isSearchDropdownOpen, setIsSearchDropdownOpen] = useState(false);
 
@@ -144,8 +147,8 @@ export default function Header({
   };
 
   return (
-    <header className="sticky top-0 z-50 bg-brand-dark/95 backdrop-blur-md border-b border-brand-teal/20 shadow-md text-white w-full">
-      <div className="max-w-[1500px] mx-auto px-4 sm:px-6 lg:px-8 h-14 flex items-center justify-between gap-4">
+    <header className="notranslate sticky top-0 z-50 bg-brand-dark/95 backdrop-blur-md border-b border-brand-teal/20 shadow-md text-white w-full" translate="no">
+      <div className="w-full px-4 sm:px-6 lg:px-8 xl:px-12 min-h-[3.5rem] py-2 lg:py-0 flex flex-wrap lg:flex-nowrap items-center justify-between gap-3 lg:gap-4">
         
         {/* Brand & City Dropdown */}
         <div className="flex items-center gap-2.5 flex-shrink-0">
@@ -159,7 +162,7 @@ export default function Header({
               id="header-city-selector-btn"
             >
               <MapPin className="h-3 w-3 text-brand-rose shrink-0" />
-              <span>{currentCity ? currentCity.name : "Select Corridor"}</span>
+              <span>{currentCity ? t(currentCity.name) : t("Select Corridor")}</span>
               <ChevronDown className={`h-3 w-3 text-slate-400 transition-transform duration-200 ${isCityDropdownOpen ? 'rotate-180' : ''}`} />
             </button>
 
@@ -181,7 +184,7 @@ export default function Header({
                       {data.logoChar}
                     </div>
                     <div className="flex flex-col min-w-0">
-                      <span className="leading-none text-xs">{data.name}</span>
+                      <span className="leading-none text-xs">{t(data.name)}</span>
                     </div>
                   </button>
                 ))}
@@ -191,7 +194,7 @@ export default function Header({
         </div>
 
         {/* City/Landmark Search Bar */}
-        <div className="relative flex-1 max-w-xs sm:max-w-sm hidden md:block" id="header-city-search-container">
+        <div className="relative flex-1 max-w-xs sm:max-w-xs lg:max-w-sm xl:max-w-md hidden md:block" id="header-city-search-container">
           <div className="relative flex items-center">
             <Search className="absolute left-3 h-4 w-4 text-brand-teal pointer-events-none" />
             <input
@@ -206,7 +209,7 @@ export default function Header({
                 // Small delay to allow clicking suggestions before onBlur closes it
                 setTimeout(() => setIsSearchDropdownOpen(false), 200);
               }}
-              placeholder="Search heritage cities & landmarks..."
+              placeholder={t("Search heritage cities & landmarks...")}
               className="w-full bg-brand-bg/70 hover:bg-brand-bg/90 focus:bg-brand-bg border border-brand-teal/25 hover:border-brand-rose/40 focus:border-brand-rose focus:ring-2 focus:ring-brand-rose/15 rounded-xl pl-9 pr-8 py-1.5 text-xs font-bold text-white transition-all duration-300 outline-none shadow-inner"
             />
             {searchQuery && (
@@ -253,7 +256,7 @@ export default function Header({
         </div>
 
         {/* Desktop Navigation - Pill styled */}
-        <nav className="hidden lg:flex items-center bg-brand-bg/50 p-1 rounded-full border border-brand-teal/15 gap-0.5 xl:gap-1">
+        <nav className="hidden lg:flex flex-wrap items-center justify-center bg-brand-bg/50 p-1 rounded-3xl lg:rounded-full border border-brand-teal/15 gap-0.5 xl:gap-1 max-w-full">
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive = activeTab === item.id;
@@ -276,7 +279,7 @@ export default function Header({
                   />
                 )}
                 <Icon className={`h-3.5 w-3.5 flex-shrink-0 ${isActive ? "text-brand-deep" : "text-brand-teal"}`} />
-                <span className="relative z-10">{item.label}</span>
+                <span className="relative z-10">{t(item.label)}</span>
                 {item.id === 'alerts' && alertsCount > 0 && (
                   <span className="w-1.5 h-1.5 rounded-full bg-brand-rose animate-pulse ml-0.5 flex-shrink-0 relative z-10" />
                 )}
@@ -285,8 +288,45 @@ export default function Header({
           })}
         </nav>
 
-        {/* Right Controls */}
-        <div className="hidden lg:block w-4" />
+        {/* Right Controls - Desktop Language Dropdown */}
+        <div className="relative hidden lg:block select-none">
+          <button
+            onClick={() => setIsLangDropdownOpen(!isLangDropdownOpen)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-brand-bg/50 hover:bg-brand-bg/80 text-left text-xs font-bold text-white transition-all cursor-pointer border border-brand-teal/20 shadow-sm"
+            id="header-lang-selector-btn"
+          >
+            <Globe className="h-3.5 w-3.5 text-brand-teal shrink-0" />
+            <span>{languages.find(l => l.code === language)?.nativeName || "English"}</span>
+            <ChevronDown className={`h-3 w-3 text-slate-400 transition-transform duration-200 ${isLangDropdownOpen ? 'rotate-180' : ''}`} />
+          </button>
+
+          {isLangDropdownOpen && (
+            <div className="absolute right-0 mt-2 w-48 max-h-72 overflow-y-auto bg-brand-dark/95 backdrop-blur-md border border-brand-teal/20 rounded-xl p-1 z-50 shadow-2xl space-y-0.5 animate-fade-in scrollbar-thin scrollbar-thumb-brand-teal/40">
+              {languages.map((lang) => (
+                <button
+                  key={lang.code}
+                  onClick={() => {
+                    setLanguage(lang.code);
+                    setIsLangDropdownOpen(false);
+                  }}
+                  className={`w-full flex items-center justify-between px-3 py-2 text-xs font-semibold rounded-lg transition-all cursor-pointer text-left ${
+                    language === lang.code 
+                      ? "bg-brand-rose text-brand-deep shadow-md font-extrabold" 
+                      : "text-slate-300 hover:bg-brand-bg/60 hover:text-white"
+                  }`}
+                >
+                  <span className="flex items-center gap-2">
+                    <span className="text-sm select-none">{lang.flag}</span>
+                    <span>{lang.nativeName}</span>
+                  </span>
+                  {language === lang.code && (
+                    <span className="text-[9px] font-extrabold text-brand-deep bg-brand-rose px-1.5 py-0.5 rounded">Active</span>
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
 
         {/* Mobile Menu Trigger */}
         <button
@@ -317,7 +357,7 @@ export default function Header({
               onBlur={() => {
                 setTimeout(() => setIsSearchDropdownOpen(false), 200);
               }}
-              placeholder="Search cities & landmarks..."
+              placeholder={t("Search cities & landmarks...")}
               className="w-full bg-brand-bg/70 border border-brand-teal/20 focus:border-brand-rose focus:ring-2 focus:ring-brand-rose/15 rounded-xl pl-9 pr-8 py-2 text-xs font-bold text-white outline-none"
             />
             {searchQuery && (
@@ -379,7 +419,7 @@ export default function Header({
                   }`}
                 >
                   <Icon className={`h-4 w-4 ${isActive ? "text-brand-deep" : "text-brand-teal"}`} />
-                  <span>{item.label}</span>
+                  <span>{t(item.label)}</span>
                 </button>
               );
             })}
@@ -387,10 +427,38 @@ export default function Header({
 
           <div className="h-px bg-brand-teal/10 my-2" />
 
+          {/* Mobile Language Selector */}
+          <div className="space-y-1">
+            <span className="text-[9px] font-extrabold uppercase tracking-widest text-slate-400 block px-2.5 font-mono">
+              {t("Language / भाषा / 🌐")}
+            </span>
+            <div className="grid grid-cols-2 gap-2 p-1 bg-brand-bg/40 rounded-2xl border border-brand-teal/10 max-h-48 overflow-y-auto">
+              {languages.map((lang) => (
+                <button
+                  key={lang.code}
+                  onClick={() => {
+                    setLanguage(lang.code);
+                    setIsMobileOpen(false);
+                  }}
+                  className={`py-1.5 text-center text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5 ${
+                    language === lang.code 
+                      ? "bg-brand-rose text-brand-deep shadow-sm" 
+                      : "text-slate-300 hover:bg-brand-bg/60"
+                  }`}
+                >
+                  <span className="text-sm select-none">{lang.flag}</span>
+                  <span>{lang.nativeName}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="h-px bg-brand-teal/10 my-2" />
+
           {/* Mobile city choices list */}
           <div className="space-y-1">
             <span className="text-[9px] font-extrabold uppercase tracking-widest text-slate-400 block px-2.5 font-mono">
-              Active Destination
+              {t("Active Destination")}
             </span>
             <div className="grid grid-cols-2 gap-2 p-1 bg-brand-bg/40 rounded-2xl border border-brand-teal/10">
               {Object.entries(cityMetaData).map(([id, data]) => (
@@ -406,7 +474,7 @@ export default function Header({
                       : "text-slate-300 hover:bg-brand-bg/60"
                   }`}
                 >
-                  {data.name}
+                  {t(data.name)}
                 </button>
               ))}
             </div>
