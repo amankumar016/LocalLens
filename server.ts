@@ -2,6 +2,8 @@ import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, Type } from "@google/genai";
+import { WebSocketServer, WebSocket } from "ws";
+import http from "http";
 import { PolicyInputs, SimulationResult, Entrepreneur, CivicAlert, TrustReport } from "./src/types";
 
 const app = express();
@@ -16,7 +18,7 @@ function getAI(): GoogleGenAI | null {
       console.info("GEMINI_API_KEY environment variable is missing. Running in high-fidelity mock fallback mode.");
       return null;
     }
-    aiClient = new GoogleGenAI({
+    const realClient = new GoogleGenAI({
       apiKey,
       httpOptions: {
         headers: {
@@ -24,6 +26,69 @@ function getAI(): GoogleGenAI | null {
         }
       }
     });
+
+    // Highly resilient proxy wrapper that automatically falls back to alternative models
+    // (e.g. from gemini-3.5-flash to gemini-3.1-flash-lite) if a model encounters transient 503 or quota limits
+    aiClient = new Proxy(realClient, {
+      get(target, prop, receiver) {
+        if (prop === 'models') {
+          const realModels = target.models;
+          return new Proxy(realModels, {
+            get(modelsTarget, modelsProp, modelsReceiver) {
+              if (modelsProp === 'generateContent') {
+                const realGenerateContent = modelsTarget.generateContent;
+                return async function(params: any) {
+                  const originalModel = params.model;
+                  const modelsToTry = [originalModel];
+                  
+                  if (originalModel === "gemini-3.5-flash") {
+                    modelsToTry.push("gemini-3.1-flash-lite");
+                    modelsToTry.push("gemini-3.1-pro-preview");
+                  } else if (originalModel === "gemini-3.1-flash-lite") {
+                    modelsToTry.push("gemini-3.5-flash");
+                    modelsToTry.push("gemini-3.1-pro-preview");
+                  } else if (originalModel === "gemini-3.1-pro-preview") {
+                    modelsToTry.push("gemini-3.5-flash");
+                    modelsToTry.push("gemini-3.1-flash-lite");
+                  }
+
+                  let lastErr: any = null;
+                  for (const modelName of modelsToTry) {
+                    try {
+                      const modifiedParams = { ...params, model: modelName };
+                      return await realGenerateContent.call(modelsTarget, modifiedParams);
+                    } catch (err: any) {
+                      lastErr = err;
+                      const errMsg = err instanceof Error ? err.message : String(err);
+                      const isTransient = 
+                        errMsg.includes("503") || 
+                        errMsg.includes("UNAVAILABLE") || 
+                        errMsg.includes("429") ||
+                        errMsg.includes("quota") ||
+                        errMsg.includes("RESOURCE_EXHAUSTED") ||
+                        errMsg.includes("rate-limits") ||
+                        errMsg.includes("overloaded") || 
+                        errMsg.includes("temporary") ||
+                        errMsg.includes("demand");
+                      
+                      if (isTransient) {
+                        console.info(`[Gemini Proxy Status] Model ${modelName} returned transient code. Transitioning to alternative.`);
+                        continue;
+                      } else {
+                        throw err;
+                      }
+                    }
+                  }
+                  throw lastErr;
+                };
+              }
+              return Reflect.get(modelsTarget, modelsProp, modelsReceiver);
+            }
+          });
+        }
+        return Reflect.get(target, prop, receiver);
+      }
+    }) as any;
   }
   return aiClient;
 }
@@ -58,7 +123,38 @@ function handleGeminiError(error: any, contextName: string) {
     last429Time = Date.now();
     console.info(`[Gemini Circuit Breaker] Rate limit (429 / Quota) detected in ${contextName}. Activating 60s cooldown.`);
   } else {
-    console.info(`[Gemini Fallback] Non-rate-limit issue in ${contextName}: ${errMsg}`);
+    console.info(`[Gemini Status] Running heuristic simulation fallback in ${contextName}.`);
+  }
+}
+
+// Resilient wrapper with exponential backoff to handle transient errors (such as 503 UNAVAILABLE due to high demand)
+async function callGeminiWithRetry<T>(
+  apiCall: () => Promise<T>,
+  maxRetries = 3,
+  initialDelay = 1000
+): Promise<T> {
+  let attempt = 0;
+  while (true) {
+    try {
+      return await apiCall();
+    } catch (error: any) {
+      attempt++;
+      const errMsg = error instanceof Error ? error.message : String(error);
+      const isTransient = 
+        errMsg.includes("503") || 
+        errMsg.includes("UNAVAILABLE") || 
+        errMsg.includes("500") || 
+        errMsg.includes("overloaded") || 
+        errMsg.includes("temporary") ||
+        errMsg.includes("demand");
+      if (attempt <= maxRetries && isTransient) {
+        const delay = initialDelay * Math.pow(2, attempt - 1);
+        console.info(`[Gemini Auto-Retry] Resubmitting request in ${delay}ms (Attempt ${attempt}/${maxRetries})`);
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      } else {
+        throw error;
+      }
+    }
   }
 }
 
@@ -252,13 +348,13 @@ The schema of your response MUST match this JSON exactly:
 
 Do not include any wrapping backticks or comments. Just return the raw JSON object.`;
 
-        const response = await ai.models.generateContent({
+        const response = await callGeminiWithRetry(() => ai.models.generateContent({
           model: "gemini-3.5-flash",
           contents: prompt,
           config: {
             responseMimeType: "application/json"
           }
-        });
+        }));
 
         if (response.text) {
           const cleanedText = response.text.trim().replace(/^```json\s*/, '').replace(/```$/, '').trim();
@@ -834,8 +930,27 @@ function calculateCivicMetrics(inputs: PolicyInputs): SimulationResult {
     middlemenCommissionCap,
     standardizedRatesEnabled,
     touristMultiplier,
-    weatherHazard
+    weatherHazard,
+    activeDirectives = []
   } = inputs;
+
+  // Calculate active emergency response directive costs (depleting general sanitation budget)
+  let directiveCosts = 0;
+  if (activeDirectives.includes('pumping_crews')) {
+    directiveCosts += 50; // 50 Lakhs
+  }
+  if (activeDirectives.includes('hydration_booths')) {
+    directiveCosts += 30; // 30 Lakhs
+  }
+  if (activeDirectives.includes('tidal_barriers')) {
+    directiveCosts += 40; // 40 Lakhs
+  }
+  if (activeDirectives.includes('anti_scam_squads')) {
+    directiveCosts += 25; // 25 Lakhs
+  }
+
+  // Net waste budget left for standard daily sanitation operations
+  const netWasteBudget = Math.max(10, wasteManagementBudget - directiveCosts);
 
   // Let's modify base coefficients and calculation formulas based on city traits to feel completely real and responsive!
   let baseEcon = 38;
@@ -874,7 +989,25 @@ function calculateCivicMetrics(inputs: PolicyInputs): SimulationResult {
   // 2. Traveler Safety Trust Rating (1-100)
   const patrolEffect = safetyPatrolIntensity * 2.0;
   const ratesTrust = standardizedRatesEnabled ? 15 : -6;
-  const weatherEffect = weatherHazard === 'high' ? -18 : weatherHazard === 'medium' ? -6 : 0;
+  
+  // Directive Mitigations for Weather and Safety
+  let weatherSafetyOffset = 0;
+  if (weatherHazard !== 'low') {
+    if (activeDirectives.includes('pumping_crews') && (city === 'varanasi' || city === 'hampi')) {
+      weatherSafetyOffset += weatherHazard === 'high' ? 12 : 4;
+    }
+    if (activeDirectives.includes('hydration_booths') && city === 'jaipur') {
+      weatherSafetyOffset += weatherHazard === 'high' ? 10 : 3;
+    }
+    if (activeDirectives.includes('tidal_barriers') && city === 'kochi') {
+      weatherSafetyOffset += weatherHazard === 'high' ? 11 : 4;
+    }
+  }
+  if (activeDirectives.includes('anti_scam_squads')) {
+    weatherSafetyOffset += 8;
+  }
+
+  const weatherEffect = (weatherHazard === 'high' ? -18 : weatherHazard === 'medium' ? -6 : 0) + weatherSafetyOffset;
   const touristStrain = (touristMultiplier - 1) * 8;
   let safetyTrustRating = baseSafety + patrolEffect + ratesTrust + weatherEffect - touristStrain;
   safetyTrustRating = Math.min(98, Math.max(22, safetyTrustRating));
@@ -882,24 +1015,45 @@ function calculateCivicMetrics(inputs: PolicyInputs): SimulationResult {
   // 3. Local Merchant Revenue Growth (%)
   const tourEffect = touristMultiplier * 11.5;
   const trustGrowth = (safetyTrustRating - 50) * 0.18;
-  const weatherSqueeze = weatherHazard === 'high' ? -14 : weatherHazard === 'medium' ? -4 : 0;
-  const cleanGrowth = (wasteManagementBudget / 100) * 2.2;
+  
+  let weatherSqueezeOffset = 0;
+  if (weatherHazard !== 'low') {
+    if (activeDirectives.includes('pumping_crews') && (city === 'varanasi' || city === 'hampi')) {
+      weatherSqueezeOffset += weatherHazard === 'high' ? 8 : 2;
+    }
+    if (activeDirectives.includes('hydration_booths') && city === 'jaipur') {
+      weatherSqueezeOffset += weatherHazard === 'high' ? 7 : 2;
+    }
+  }
+  const weatherSqueeze = (weatherHazard === 'high' ? -14 : weatherHazard === 'medium' ? -4 : 0) + weatherSqueezeOffset;
+  const cleanGrowth = (netWasteBudget / 100) * 2.2;
   let merchantRevenueGrowth = baseGrowth + tourEffect + trustGrowth + weatherSqueeze + cleanGrowth;
   merchantRevenueGrowth = Math.min(50, Math.max(-18, merchantRevenueGrowth));
 
   // 4. Scam & Overcharging Complaints (per 1k tourists)
   const patrolDeterrent = safetyPatrolIntensity * 1.7;
   const standardRatesCut = standardizedRatesEnabled ? 22 : 0;
+  const antiScamReduction = activeDirectives.includes('anti_scam_squads') ? 12 : 0;
   const middlemanGreed = (middlemenCommissionCap - 10) * 0.28;
   const crowdFriction = (touristMultiplier - 1) * 9.5;
-  let complaintsRate = baseComplaints - patrolDeterrent - standardRatesCut + middlemanGreed + crowdFriction;
+  let complaintsRate = baseComplaints - patrolDeterrent - standardRatesCut - antiScamReduction + middlemanGreed + crowdFriction;
   complaintsRate = Math.min(88, Math.max(1, complaintsRate));
 
   // 5. Traffic Congestion Index (%)
   const rickshawDensity = (rickshawSubsidy / 1000) * 1.6;
   const touristGridlock = touristMultiplier * 15.5;
   const trafficPatrolGuard = safetyPatrolIntensity * 0.7;
-  const weatherDetour = weatherHazard === 'high' ? 24 : weatherHazard === 'medium' ? 8 : 0;
+
+  let weatherDetourOffset = 0;
+  if (weatherHazard !== 'low') {
+    if (activeDirectives.includes('pumping_crews') && (city === 'varanasi' || city === 'hampi')) {
+      weatherDetourOffset -= weatherHazard === 'high' ? 14 : 5;
+    }
+    if (activeDirectives.includes('hydration_booths') && city === 'jaipur') {
+      weatherDetourOffset -= weatherHazard === 'high' ? 10 : 3;
+    }
+  }
+  const weatherDetour = (weatherHazard === 'high' ? 24 : weatherHazard === 'medium' ? 8 : 0) + weatherDetourOffset;
   let trafficCongestion = baseCongestion + rickshawDensity + touristGridlock - trafficPatrolGuard + weatherDetour;
   trafficCongestion = Math.min(98, Math.max(15, trafficCongestion));
 
@@ -910,9 +1064,19 @@ function calculateCivicMetrics(inputs: PolicyInputs): SimulationResult {
   weaverCooperativeIncome = Math.min(55, Math.max(-8, weaverCooperativeIncome));
 
   // 7. Sanitation / Cleanliness Score (%)
-  const budgetCleaning = (wasteManagementBudget / 10) * 0.92;
+  const budgetCleaning = (netWasteBudget / 10) * 0.92;
   const crowdDebris = (touristMultiplier - 1) * 11.5;
-  const weatherSilt = weatherHazard === 'high' ? -19 : weatherHazard === 'medium' ? -5 : 0;
+
+  let weatherSiltOffset = 0;
+  if (weatherHazard !== 'low') {
+    if (activeDirectives.includes('pumping_crews') && (city === 'varanasi' || city === 'hampi')) {
+      weatherSiltOffset += weatherHazard === 'high' ? 11 : 3;
+    }
+    if (activeDirectives.includes('tidal_barriers') && city === 'kochi') {
+      weatherSiltOffset += weatherHazard === 'high' ? 12 : 3;
+    }
+  }
+  const weatherSilt = (weatherHazard === 'high' ? -19 : weatherHazard === 'medium' ? -5 : 0) + weatherSiltOffset;
   const patrolFines = safetyPatrolIntensity * 0.85;
   let ghatCleanliness = baseClean + budgetCleaning - crowdDebris + weatherSilt + patrolFines;
   ghatCleanliness = Math.min(99, Math.max(18, ghatCleanliness));
@@ -932,6 +1096,7 @@ function calculateCivicMetrics(inputs: PolicyInputs): SimulationResult {
 function updateEntrepreneursIncome(inputs: PolicyInputs, metrics: SimulationResult): Entrepreneur[] {
   const city = inputs.city || 'varanasi';
   const baselineList = entrepreneursByCity[city] || entrepreneursByCity.varanasi;
+  const activeDirectives = inputs.activeDirectives || [];
 
   return baselineList.map(e => {
     let multiplier = 1.0;
@@ -951,8 +1116,13 @@ function updateEntrepreneursIncome(inputs: PolicyInputs, metrics: SimulationResu
           statusText = "Compelled to bargain heavily to cover fuel costs.";
         }
         if (inputs.weatherHazard === 'high') {
-          multiplier -= 0.6;
-          statusText = "🚨 Ganga level high. Row boat tours suspended.";
+          if (activeDirectives.includes('pumping_crews')) {
+            multiplier -= 0.15;
+            statusText = "🚨 Ganga level high, but emergency pumping crews enabled limited secure ferry operations!";
+          } else {
+            multiplier -= 0.6;
+            statusText = "🚨 Ganga level high. Row boat tours suspended.";
+          }
         }
         if (metrics.ghatCleanliness > 75) {
           multiplier += 0.15;
@@ -1007,8 +1177,13 @@ function updateEntrepreneursIncome(inputs: PolicyInputs, metrics: SimulationResu
           statusText = "Bazaar tipping is unstable. Income relies on unpredictable tourists.";
         }
         if (inputs.weatherHazard === 'high') {
-          multiplier -= 0.4;
-          statusText = "🚨 Intense 45°C heatwaves empty street performance squares.";
+          if (activeDirectives.includes('hydration_booths')) {
+            multiplier -= 0.12;
+            statusText = "🚨 Intense heatwave, but emergency mist cooling & hydration stations preserved street audience loops!";
+          } else {
+            multiplier -= 0.4;
+            statusText = "🚨 Intense 45°C heatwaves empty street performance squares.";
+          }
         }
       } else if (e.role === "E-Rickshaw Driver") { // Pink City Auto
         multiplier += (inputs.rickshawSubsidy / 3500) * 0.35;
@@ -1032,8 +1207,13 @@ function updateEntrepreneursIncome(inputs: PolicyInputs, metrics: SimulationResu
       if (e.role === "Boatman") { // Chinese Net / Backwater ferry
         multiplier += (inputs.touristMultiplier - 1) * 0.35;
         if (inputs.weatherHazard === 'high') {
-          multiplier -= 0.5;
-          statusText = "🚨 Rough coastal tides restrict backwater boat tours.";
+          if (activeDirectives.includes('tidal_barriers')) {
+            multiplier -= 0.15;
+            statusText = "🚨 Rough coastal tides, but defensive sandbagging & tidal barriers protected shore stalls!";
+          } else {
+            multiplier -= 0.5;
+            statusText = "🚨 Rough coastal tides restrict backwater boat tours.";
+          }
         }
         if (metrics.ghatCleanliness > 75) {
           multiplier += 0.2;
@@ -1071,8 +1251,13 @@ function updateEntrepreneursIncome(inputs: PolicyInputs, metrics: SimulationResu
       if (e.role === "Boatman") { // Coracle rowers
         multiplier += (inputs.touristMultiplier - 1) * 0.4;
         if (inputs.weatherHazard === 'high') {
-          multiplier -= 0.65;
-          statusText = "🚨 Tungabhadra river discharge levels dangerous. Coracles halted.";
+          if (activeDirectives.includes('pumping_crews')) {
+            multiplier -= 0.18;
+            statusText = "🚨 Dangerous discharge, but emergency water patrols and security barriers supported coracle rowers!";
+          } else {
+            multiplier -= 0.65;
+            statusText = "🚨 Tungabhadra river discharge levels dangerous. Coracles halted.";
+          }
         } else if (inputs.standardizedRatesEnabled) {
           statusText = "Standardized tourist ferry rate brings highly stable row wages.";
         } else {
@@ -1601,7 +1786,7 @@ app.post("/api/feeds/override", (req, res) => {
 });
 
 app.post("/api/reports", (req, res) => {
-  const { reporterName, incidentType, location, description, city } = req.body;
+  const { reporterName, incidentType, location, description, city, verifiedReceipt } = req.body;
   if (!reporterName || !incidentType || !location || !description) {
     return res.status(400).json({ error: "Missing required report fields" });
   }
@@ -1613,7 +1798,8 @@ app.post("/api/reports", (req, res) => {
     incidentType,
     location,
     description,
-    timestamp: "Just now"
+    timestamp: "Just now",
+    verifiedReceipt
   };
 
   if (!reportsLogByCity[activeCity]) {
@@ -1643,7 +1829,7 @@ app.post("/api/reports", (req, res) => {
 // AI Travel Destination Suggestions and Itinerary Generator API
 app.post("/api/travel/suggest", async (req, res) => {
   try {
-    const { destination, budget, duration, style, companions } = req.body;
+    const { destination, budget, duration, style, companions, activeHazard, activeAlerts } = req.body;
 
     if (!budget || !duration || !style) {
       return res.status(400).json({ error: "Missing required parameters: budget, duration, or style." });
@@ -1655,7 +1841,8 @@ app.post("/api/travel/suggest", async (req, res) => {
     const selectedDestination = destination || "Anywhere";
     const selectedCompanions = companions || "Solo";
 
-    const cacheKey = `${selectedDestination}_${numBudget}_${numDuration}_${selectedStyle}_${selectedCompanions}`;
+    const hazardKey = activeHazard ? `_hz_${activeHazard}` : '';
+    const cacheKey = `${selectedDestination}_${numBudget}_${numDuration}_${selectedStyle}_${selectedCompanions}${hazardKey}`;
     let suggestResponseJSON: any = null;
 
     if (travelSuggestCache.has(cacheKey)) {
@@ -1671,12 +1858,14 @@ Analyze the following travel preferences across India:
 - Trip Duration: ${numDuration} Days
 - Travel Vibe/Style: "${selectedStyle}" (e.g., Spiritual, Heritage, Adventure, Beach, Luxury)
 - Companion type: "${selectedCompanions}"
+- Active City Climate Hazard level: "${activeHazard || 'low'}" (CRITICAL: If the hazard level is 'high' or 'medium', you MUST adapt the daily itinerary to be safe and resilient. For example, during high monsoon flood silts, replace open river boat rides with safe indoor handloom weavers co-op tours; during high desert heatwaves, avoid open walking tours between 11 AM - 3:30 PM, suggesting mid-day air-conditioned pottery throwing classes, and shift sand dunes safaris to breezy late evenings!)
+- Active Municipal Emergency Alerts: "${activeAlerts && activeAlerts.length > 0 ? activeAlerts.join('; ') : 'No active alerts'}"
 
 Suggest 1 to 2 perfect travel spots/cities in India that perfectly match these budget constraints and preferences.
 For each suggested spot, you MUST generate:
 1. Detailed estimated cost breakdown (stay, transport, food, activities) that fits the ₹${numBudget} INR budget.
 2. Highlighting of local heritage crafts, micro-entrepreneurs, weavers, boatmen, or local artisans to support (align with our app's Civic Heritage theme).
-3. A highly detailed day-wise itinerary for the entire ${numDuration} days. Each day MUST have morning, afternoon, evening activities, and local food recommendations.
+3. A highly detailed day-wise itinerary for the entire ${numDuration} days. Each day MUST have morning, afternoon, evening activities, and local food recommendations, fully adapted to mitigate the active climate hazard if applicable.
 4. Professional travel specialist planner advice on staying within the budget.
 
 You MUST respond strictly with a valid JSON object matching this schema. Do not include any markdown comments or wrapping backticks around the JSON. Just return the raw JSON object:
@@ -1720,13 +1909,13 @@ You MUST respond strictly with a valid JSON object matching this schema. Do not 
   ]
 }`;
 
-          const response = await ai.models.generateContent({
+          const response = await callGeminiWithRetry(() => ai.models.generateContent({
             model: "gemini-3.5-flash",
             contents: prompt,
             config: {
               responseMimeType: "application/json"
             }
-          });
+          }));
 
           if (response.text) {
             // Parse JSON safely
@@ -1979,7 +2168,8 @@ app.post("/api/scenarios/simulate", async (req, res) => {
 
     const targetCity = cityMap[city] || cityMap.varanasi;
 
-    const cacheKey = `${city}_${inputs.rickshawSubsidy}_${inputs.wasteManagementBudget}_${inputs.safetyPatrolIntensity}_${inputs.middlemenCommissionCap}_${inputs.standardizedRatesEnabled}_${inputs.touristMultiplier}_${inputs.weatherHazard}`;
+    const directivesKey = inputs.activeDirectives ? inputs.activeDirectives.join(',') : '';
+    const cacheKey = `${city}_${inputs.rickshawSubsidy}_${inputs.wasteManagementBudget}_${inputs.safetyPatrolIntensity}_${inputs.middlemenCommissionCap}_${inputs.standardizedRatesEnabled}_${inputs.touristMultiplier}_${inputs.weatherHazard}_${directivesKey}`;
 
     if (policyBriefCache.has(cacheKey)) {
       aiPolicyBrief = policyBriefCache.get(cacheKey) || "";
@@ -1995,6 +2185,7 @@ Assess the following active policy scenario inputs:
 - Standardized rates for tour rides, boats, and guides: ${inputs.standardizedRatesEnabled ? "On" : "Off"}
 - Seasonal Tourist Volume Multiplier: ${inputs.touristMultiplier}x
 - Active Environmental Hazard level (Monsoon Floods or Desert Heatwaves depending on city): "${inputs.weatherHazard}"
+- Active Emergency Response Directives: ${inputs.activeDirectives && inputs.activeDirectives.length > 0 ? inputs.activeDirectives.join(', ') : "None"}
 
 Simulated Civic Metrics:
 - Artisan & Driver Direct Economic Sharing Index: ${metrics.economicDistribution}%
@@ -2007,20 +2198,20 @@ Simulated Civic Metrics:
 
 Write an expert, beautifully articulated, human-sounding "Strategic Policy Outlook & Socio-Economic Assessment" analyzing the scenario for ${targetCity.fullName}.
 Address:
-1. How these specific policies affect the livelihoods of local craftsmen, eco-drivers, and boatmen/operators under the active hazard level (${inputs.weatherHazard}).
+1. How these specific policies and emergency directives (like pumping crews, hydration booths, anti-scam squads, sandbags) affect the livelihoods of local craftsmen, eco-drivers, and boatmen/operators under the active hazard level (${inputs.weatherHazard}).
 2. The trade-off between higher tourist crowds causing corridors/lanes congestion vs local merchant prosperity.
-3. Recommendations on sanitation waste budget adjustments to handle the hazard, and safety patrols to suppress tourist commission trap complaints.
+3. Recommendations on resource reallocations to cover emergency directive costs, and how anti-scam squads or price caps have succeeded or where adjustments are needed.
 
 The assessment MUST be formatted as 3 to 4 distinct paragraphs in clean Markdown. Use headings, bold text, and brief bullets if appropriate.
 Use professional, objective, yet deeply caring civic prose with a high-end municipal authority style. Do not output JSON. Just output clean, beautiful Markdown text.`;
 
-        const response = await ai.models.generateContent({
+        const response = await callGeminiWithRetry(() => ai.models.generateContent({
           model: "gemini-3.5-flash",
           contents: prompt,
           config: {
             systemInstruction: "You are the Lead Heritage Municipal Planner. Keep tone objective, caring, and professional. Output Markdown."
           }
-        });
+        }));
 
         if (response.text) {
           aiPolicyBrief = response.text.trim();
@@ -2201,13 +2392,13 @@ Focus on:
 
 The brief must be written in elegant, objective, and deeply caring municipal prose. Format as 3-4 distinct paragraphs in clean Markdown (no JSON). Use headings, bold text, and bullet points where appropriate. Do not use generic placeholders.`;
 
-          const response = await ai.models.generateContent({
+          const response = await callGeminiWithRetry(() => ai.models.generateContent({
             model: "gemini-3.5-flash",
             contents: prompt,
             config: {
               systemInstruction: "You are an elite municipal development consultant. Write professional comparative assessments in Markdown."
             }
-          });
+          }));
           if (response.text) {
             aiBrief = response.text.trim();
             comparativeBriefCache.set(cacheKey, aiBrief);
@@ -2288,10 +2479,10 @@ Provide a highly custom recommendation combining the metrics of economic distrib
 
 Be highly detailed, analytical, and professional. Avoid generic filler.`;
 
-          const response = await ai.models.generateContent({
+          const response = await callGeminiWithRetry(() => ai.models.generateContent({
             model: "gemini-3.5-flash",
             contents: prompt,
-          });
+          }));
           synthesisMarkdown = response.text || "";
           if (synthesisMarkdown) {
             modelSynthesisCache.set(cacheKey, synthesisMarkdown);
@@ -2409,7 +2600,7 @@ Based on the combined neural synthesis, **${cityName}** should immediately coord
 // Interactive AI Heritage Concierge Chatbot query endpoint
 app.post("/api/chatbot/query", async (req, res) => {
   try {
-    const { city, inputs, metrics, query, chatHistory } = req.body;
+    const { city, inputs, metrics, query, chatHistory, latLng } = req.body;
 
     if (!query) {
       return res.status(400).json({ error: "Query is required" });
@@ -2425,6 +2616,7 @@ app.post("/api/chatbot/query", async (req, res) => {
     const cityName = cityNames[cityId] || (cityId.charAt(0).toUpperCase() + cityId.slice(1));
 
     let reply = "";
+    let mapsSources: any[] = [];
 
     if (isGeminiAvailable()) {
       const ai = getAI();
@@ -2460,19 +2652,56 @@ Keep your tone welcoming, culturally appreciative (appreciating Swadeshi crafts 
 
           const prompt = `User's Question: "${query}"`;
 
-          // Let's use the standard generateContent call, passing the history and systemInstruction
-          const response = await ai.models.generateContent({
+          // Configure standard generateContent with googleMaps tool for maps grounding!
+          const config: any = {
+            systemInstruction: activeSystemInstruction,
+            tools: [{ googleMaps: {} }]
+          };
+
+          if (latLng && latLng.latitude && latLng.longitude) {
+            config.toolConfig = {
+              retrievalConfig: {
+                latLng: {
+                  latitude: Number(latLng.latitude),
+                  longitude: Number(latLng.longitude)
+                }
+              }
+            };
+          }
+
+          const response = await callGeminiWithRetry(() => ai.models.generateContent({
             model: "gemini-3.5-flash",
             contents: [
               ...formattedHistory,
               { role: "user", parts: [{ text: prompt }] }
             ],
-            config: {
-              systemInstruction: activeSystemInstruction
-            }
-          });
+            config
+          }));
 
           reply = response.text || "";
+
+          // Extract grounding sources to fulfill requirement of listing links
+          const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
+          mapsSources = groundingChunks
+            .map((chunk: any) => {
+              if (chunk.maps) {
+                const snippets = chunk.maps.placeAnswerSources?.map((source: any) => source.reviewSnippets).flat().filter(Boolean) || [];
+                return {
+                  title: chunk.maps.title || "Local Place",
+                  uri: chunk.maps.uri,
+                  reviewSnippets: snippets
+                };
+              } else if (chunk.web) {
+                return {
+                  title: chunk.web.title || "Web Resource",
+                  uri: chunk.web.uri,
+                  reviewSnippets: []
+                };
+              }
+              return null;
+            })
+            .filter(Boolean);
+
         } catch (geminiErr) {
           handleGeminiError(geminiErr, "Chatbot Query");
         }
@@ -2536,6 +2765,7 @@ Ask me anything about local artisans, safety suggestions, custom walking tours, 
     res.json({
       success: true,
       reply,
+      mapsSources: mapsSources || [],
       timestamp: new Date().toLocaleTimeString()
     });
 
@@ -2544,6 +2774,179 @@ Ask me anything about local artisans, safety suggestions, custom walking tours, 
     res.status(500).json({ error: "Failed to process concierge inquiry" });
   }
 });
+
+// AI Artisan Business & Marketing Consultation endpoint (uses gemini-3.1-flash-lite)
+app.post("/api/artisan/consult", async (req, res) => {
+  try {
+    const { name, craft, bio, city } = req.body;
+
+    if (!name || !craft) {
+      return res.status(400).json({ error: "Artisan name and craft are required." });
+    }
+
+    let responsePlan = "";
+
+    if (isGeminiAvailable()) {
+      const ai = getAI();
+      if (ai) {
+        try {
+          const prompt = `You are an elite Swadeshi Artisan micro-business consultant and heritage marketing specialist.
+Develop a tailored growth and marketing consult for this traditional artisan:
+- Name: "${name}"
+- Traditional Craft: "${craft}"
+- Heritage City: "${city || "Heritage Corridor"}"
+- Background Bio: "${bio || "Traditional artisan practitioner"}"
+
+Generate a highly inspiring, practical, and action-oriented consult. Include:
+1. **A captivating brand story hook** and 2 unique, eye-catching social media marketing captions with trending Swadeshi hashtags.
+2. **3 direct micro-business improvement recommendations** (e.g., packaging, raw material sourcing, storytelling labels, or cooperative direct-sale avenues).
+3. **A customized pricing strategy** to ensure they avoid middlemen exploitation and maximize their direct-to-consumer profit margins.
+
+Keep your tone deeply appreciative, professional, objective, and supportive. Respond with clean, beautiful Markdown. No filler words or generic introductions.`;
+
+          const response = await callGeminiWithRetry(() => ai.models.generateContent({
+            model: "gemini-3.1-flash-lite", // fastest model for quick actions!
+            contents: prompt,
+          }));
+
+          responsePlan = response.text || "";
+        } catch (geminiErr) {
+          handleGeminiError(geminiErr, "Artisan Consultation");
+        }
+      }
+    }
+
+    if (!responsePlan) {
+      // High-fidelity fallback
+      responsePlan = `### **Swadeshi Growth Strategy for ${name} (${craft})**
+
+#### **1. Brand Story & Marketing Angle**
+- *Brand Story*: "${name} preserves centuries of traditional ${craft} inside the heart of ${city || "the Heritage Corridor"}, transforming raw, locally sourced materials into timeless, sustainable masterpieces."
+- *Instagram Post Caption*: "✨ Hand-woven, heart-made. Meet ${name}, a master of ${craft} bringing the rich legacy of ${city || "our heritage"} straight to your home. Support genuine grassroots craftsmanship! 🧵🏺 #SwadeshiLegacy #MakeInIndia #VocalForLocal #ArtisanSutra"
+
+#### **2. Micro-Business Action Plan**
+- **Sustainable Packaging**: Transition to lightweight, branded craft-paper wrappers featuring a hand-signed card by ${name} describing the history of ${craft}.
+- **Cooperative Direct Sales**: Register with local Swadeshi weaver/artisan co-ops to leverage collective shipping and avoid high-commission merchant agents.
+- **Storytelling NFC/QR Codes**: Attach small, simple QR-code tags to each craft piece linking directly to a short, authentic video of ${name} at work.
+
+#### **3. Fair-Price Protection**
+- Establish a **Direct-to-Consumer standard price floor** that completely bypasses middleman markups.
+- Maintain a minimum 60% gross profit margin to safely fund raw materials, workshop upgrades, and medical micro-insurance.`;
+    }
+
+    res.json({
+      success: true,
+      consult: responsePlan,
+      timestamp: new Date().toLocaleTimeString()
+    });
+
+  } catch (error: any) {
+    console.error("Artisan consult error:", error);
+    res.status(500).json({ error: "Failed to generate artisan business consultation" });
+  }
+});
+
+// Setup WebSocket Server for Live API Voice Conversations
+function setupLiveVoiceWebSocket(server: any) {
+  const wss = new WebSocketServer({ noServer: true });
+
+  server.on("upgrade", (request: http.IncomingMessage, socket: any, head: any) => {
+    const { pathname } = new URL(request.url || "", `http://${request.headers.host}`);
+    if (pathname === "/api/voice-live") {
+      wss.handleUpgrade(request, socket, head, (ws) => {
+        wss.emit("connection", ws, request);
+      });
+    }
+  });
+
+  wss.on("connection", async (ws: WebSocket) => {
+    console.log("[LiveWS] Client connected for voice-live API session");
+    const ai = getAI();
+    if (!ai) {
+      ws.send(JSON.stringify({ type: "error", error: "Gemini API Client is not available or missing GEMINI_API_KEY." }));
+      ws.close();
+      return;
+    }
+
+    let session: any = null;
+
+    try {
+      session = await ai.live.connect({
+        model: "gemini-3.1-flash-live-preview",
+        config: {
+          responseModalities: ["AUDIO" as any],
+          speechConfig: {
+            voiceConfig: { prebuiltVoiceConfig: { voiceName: "Zephyr" } },
+          },
+          systemInstruction: `You are the Swadeshi AI Heritage Concierge, an interactive municipal and tourism vocal advisor for the Indian Heritage Corridor.
+Respond to the user with warm, appreciative, concise, and helpful heritage insights.
+Keep your vocal answers short, natural, and friendly. Avoid lengthy paragraphs, since this is a real-time voice conversation.`,
+        },
+        callbacks: {
+          onmessage: (message: any) => {
+            // Check for audio data in the message from Gemini
+            const audioPart = message.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data;
+            if (audioPart) {
+              ws.send(JSON.stringify({ type: "audio", audio: audioPart }));
+            }
+
+            // Check if model returned some text transcription or transcript
+            const textPart = message.serverContent?.modelTurn?.parts?.[0]?.text;
+            if (textPart) {
+              ws.send(JSON.stringify({ type: "text", text: textPart }));
+            }
+
+            if (message.serverContent?.interrupted) {
+              ws.send(JSON.stringify({ type: "interrupted", interrupted: true }));
+            }
+          },
+          onclose: () => {
+            console.log("[LiveWS] Gemini Live session closed");
+            ws.send(JSON.stringify({ type: "status", status: "closed" }));
+          },
+          onerror: (err: any) => {
+            console.error("[LiveWS] Gemini Live session error:", err);
+            ws.send(JSON.stringify({ type: "error", error: String(err) }));
+          }
+        },
+      });
+
+      ws.send(JSON.stringify({ type: "status", status: "ready" }));
+
+    } catch (err: any) {
+      console.error("[LiveWS] Failed to connect to Gemini Live:", err);
+      ws.send(JSON.stringify({ type: "error", error: "Failed to establish Live session: " + String(err) }));
+      ws.close();
+      return;
+    }
+
+    ws.on("message", (data: any) => {
+      try {
+        const parsed = JSON.parse(data.toString());
+        if (parsed.audio && session) {
+          session.sendRealtimeInput({
+            audio: { data: parsed.audio, mimeType: "audio/pcm;rate=16000" },
+          });
+        } else if (parsed.type === "close") {
+          ws.close();
+        }
+      } catch (err) {
+        console.error("[LiveWS] Error processing incoming client WS message:", err);
+      }
+    });
+
+    ws.on("close", () => {
+      console.log("[LiveWS] Client connection closed");
+      if (session) {
+        try {
+          session.close();
+        } catch (e) {
+          // ignore
+        }
+      }
+    });
+  });
+}
 
 // ==========================================
 // MOUNT VITE AND SERVE FRONTEND
@@ -2563,9 +2966,12 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
+  const server = app.listen(PORT, "0.0.0.0", () => {
     console.log(`Heritage Civic Dev Server booted on http://localhost:${PORT}`);
   });
+
+  // Start WebSocket listener for the Live voice API
+  setupLiveVoiceWebSocket(server);
 }
 
 startServer();

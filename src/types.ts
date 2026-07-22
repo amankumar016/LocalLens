@@ -7,6 +7,7 @@ export interface PolicyInputs {
   standardizedRatesEnabled: boolean;// Standard rate cap for tours, boats, rides
   touristMultiplier: number;        // Tourist volume multiplier (e.g. 0.5x - 3.0x)
   weatherHazard: 'low' | 'medium' | 'high'; // Monsoon flood / desert heat hazard levels
+  activeDirectives?: string[];              // Emergency civic response directives (e.g., ["silt_shoveling", "hydration_booths"])
   generateBrief?: boolean;          // Optional flag to trigger Gemini model brief generation
 }
 
@@ -51,6 +52,14 @@ export interface TrustReport {
   location: string;
   description: string;
   timestamp: string;
+  verifiedReceipt?: {
+    merchantName: string;
+    lineItems: { item: string; price: number }[];
+    total: number;
+    credibilityBoost: number;
+    isVerified: boolean;
+    rawImageName?: string;
+  };
 }
 
 export interface RealTimeMetric {

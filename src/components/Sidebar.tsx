@@ -10,13 +10,15 @@ import {
   ShieldAlert, 
   GitCompare,
   PlusCircle,
-  HelpCircle
+  HelpCircle,
+  LayoutDashboard,
+  Volume2
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
 interface SidebarProps {
-  activeTab: 'explore' | 'simulator' | 'compare' | 'hub' | 'navigator' | 'feeds' | 'alerts';
-  setActiveTab: (tab: 'explore' | 'simulator' | 'compare' | 'hub' | 'navigator' | 'feeds' | 'alerts') => void;
+  activeTab: 'explore' | 'simulator' | 'compare' | 'hub' | 'navigator' | 'feeds' | 'alerts' | 'dashboard' | 'storyteller';
+  setActiveTab: (tab: 'explore' | 'simulator' | 'compare' | 'hub' | 'navigator' | 'feeds' | 'alerts' | 'dashboard' | 'storyteller') => void;
   activeCity: string | null;
   setActiveCity: (city: string) => void;
   onOpenReportModal: () => void;
@@ -66,6 +68,8 @@ export default function Sidebar({
 
   const navItems = [
     { id: 'explore', label: 'Explore & Plan', icon: Compass, badge: null },
+    { id: 'dashboard', label: 'Stakeholder Board', icon: LayoutDashboard, badge: "GCP" },
+    { id: 'storyteller', label: 'Cultural Storyteller', icon: Volume2, badge: "RAG" },
     { id: 'simulator', label: 'Scenario Simulator', icon: Layers, badge: null },
     { id: 'compare', label: 'Scenario Comparison', icon: GitCompare, badge: null },
     { id: 'hub', label: 'MicroPreneur Hub', icon: Users, badge: null },
@@ -96,14 +100,14 @@ export default function Sidebar({
       <div className="p-6 border-b border-brand-teal/10 flex flex-col gap-1.5">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-2xl bg-brand-rose flex items-center justify-center text-brand-deep font-extrabold text-xl shadow-md border border-brand-rose/20">
-            {currentCity ? currentCity.logoChar : "🏛️"}
+            {currentCity ? currentCity.logoChar : "L"}
           </div>
           <div>
             <h1 className="text-sm font-extrabold tracking-tight leading-none font-display text-white uppercase">
-              Civic Heritage
+              LocalLens
             </h1>
             <p className="text-[10px] font-extrabold text-brand-rose tracking-wider uppercase mt-1 font-mono">
-              Decision Planner
+              Decision Platform
             </p>
           </div>
         </div>

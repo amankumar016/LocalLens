@@ -47,7 +47,7 @@ export default function SmoothScroll({ children, onScrollRatioChange }: SmoothSc
   return (
     <div 
       ref={containerRef}
-      className="flex-1 flex flex-col min-w-0 overflow-y-auto scroll-smooth custom-scrollbar relative"
+      className="flex-1 flex flex-col min-w-0 overflow-auto scroll-smooth custom-scrollbar relative"
       id="smooth-inertial-scroll-viewport"
     >
       {children}

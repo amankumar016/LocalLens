@@ -92,7 +92,7 @@ export default function Preloader({ onComplete }: PreloaderProps) {
             {/* Title & Slogan */}
             <div className="space-y-2 gsap-animate opacity-0">
               <h1 className="text-2xl font-extrabold tracking-tight uppercase font-display">
-                Civic Heritage Planner
+                LocalLens
               </h1>
               <p className="text-[9px] font-extrabold tracking-widest text-brand-rose uppercase font-mono">
                 Decision Support System v3.5
