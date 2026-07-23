@@ -56,8 +56,119 @@ import StakeholderDashboard from "./components/StakeholderDashboard";
 import CulturalStoryteller from "./components/CulturalStoryteller";
 import { useLanguage } from "./lib/LanguageContext";
 import { PolicyInputs, SimulationResult, Entrepreneur, CivicAlert, TrustReport } from "./types";
+import { APIProvider, Map, AdvancedMarker, Pin, InfoWindow, useMap } from '@vis.gl/react-google-maps';
 import gsap from "gsap";
 import { ARTISAN_PORTFOLIOS } from "./data/portfolios";
+
+const GOOGLE_MAPS_API_KEY =
+  process.env.GOOGLE_MAPS_PLATFORM_KEY ||
+  (import.meta as any).env?.VITE_GOOGLE_MAPS_PLATFORM_KEY ||
+  (globalThis as any).GOOGLE_MAPS_PLATFORM_KEY ||
+  '';
+const hasValidGoogleKey = Boolean(GOOGLE_MAPS_API_KEY) && GOOGLE_MAPS_API_KEY !== 'YOUR_API_KEY';
+
+// Custom lightweight polyline wrapper for react-google-maps using native Google Maps Polylines
+function MapPolyline({ path, strokeColor, strokeWidth, strokeOpacity, dashed }: any) {
+  const map = useMap();
+
+  useEffect(() => {
+    if (!map) return;
+
+    const polyline = new google.maps.Polyline({
+      path,
+      strokeColor,
+      strokeOpacity,
+      strokeWeight: strokeWidth,
+      map,
+      icons: dashed ? [{
+        icon: {
+          path: 'M 0,-1 0,1',
+          strokeOpacity: 1,
+          scale: 2
+        },
+        offset: '0',
+        repeat: '10px'
+      }] : undefined
+    });
+
+    return () => {
+      polyline.setMap(null);
+    };
+  }, [map, path, strokeColor, strokeWidth, strokeOpacity, dashed]);
+
+  return null;
+}
+
+const darkMapStyle = [
+  { elementType: "geometry", stylers: [{ color: "#141e24" }] },
+  { elementType: "labels.text.stroke", stylers: [{ color: "#141e24" }] },
+  { elementType: "labels.text.fill", stylers: [{ color: "#4f6e7f" }] },
+  {
+    featureType: "administrative.locality",
+    elementType: "labels.text.fill",
+    stylers: [{ color: "#d59563" }],
+  },
+  {
+    featureType: "poi",
+    elementType: "labels.text.fill",
+    stylers: [{ color: "#517c80" }],
+  },
+  {
+    featureType: "poi.park",
+    elementType: "geometry",
+    stylers: [{ color: "#182c25" }],
+  },
+  {
+    featureType: "poi.park",
+    elementType: "labels.text.fill",
+    stylers: [{ color: "#6b9a76" }],
+  },
+  {
+    featureType: "road",
+    elementType: "geometry",
+    stylers: [{ color: "#28353e" }],
+  },
+  {
+    featureType: "road",
+    elementType: "geometry.stroke",
+    stylers: [{ color: "#1d2931" }],
+  },
+  {
+    featureType: "road",
+    elementType: "labels.text.fill",
+    stylers: [{ color: "#748a96" }],
+  },
+  {
+    featureType: "road.highway",
+    elementType: "geometry",
+    stylers: [{ color: "#2c3e50" }],
+  },
+  {
+    featureType: "road.highway",
+    elementType: "geometry.stroke",
+    stylers: [{ color: "#1f2a36" }],
+  },
+  {
+    featureType: "road.highway",
+    elementType: "labels.text.fill",
+    stylers: [{ color: "#f39c12" }],
+  },
+  {
+    featureType: "water",
+    elementType: "geometry",
+    stylers: [{ color: "#0e1a20" }],
+  },
+  {
+    featureType: "water",
+    elementType: "labels.text.fill",
+    stylers: [{ color: "#29465b" }],
+  },
+  {
+    featureType: "water",
+    elementType: "labels.text.stroke",
+    stylers: [{ color: "#0e1a20" }],
+  },
+];
 
 // Artisan Avatar helper component with custom high-fidelity initial fallbacks
 function ArtisanAvatar({ src, name, className = "w-10 h-10 rounded-xl" }: { src: string; name: string; className?: string }) {
@@ -111,11 +222,13 @@ const cityConfigs = {
     congestionLabel: "Ancient Lane Transit Congestion",
     coopLabel: "Weaver Cooperative Payout Growth",
     incidentLocations: ["Dashashwamedh Ghat", "Assi Ghat", "Godowlia Crossing", "Manikarnika Lane", "Madanpura Weavers Lane"],
+    mapCenter: { lat: 25.304, lng: 83.010 },
+    mapZoom: 13.5,
     scenicNodes: [
-      { name: "Godowlia Crossing", description: "Narrow Lane Gridlock Node", x: "20%", y: "22%", iconType: "transit", metricKey: "trafficCongestion" },
-      { name: "Madanpura Saree Lane", description: "Banarasi Weavers Co-op", x: "78%", y: "38%", iconType: "coop", metricKey: "weaverCooperativeIncome" },
-      { name: "Dashashwamedh Ghat", description: "River Front Purification Node", x: "32%", y: "76%", iconType: "sanitation", metricKey: "ghatCleanliness" },
-      { name: "Assi Ghat Anchor", description: "Boatmen Tourism Hub", x: "82%", y: "82%", iconType: "anchor", metricKey: "safetyTrustRating" }
+      { name: "Godowlia Crossing", description: "Narrow Lane Gridlock Node", x: "20%", y: "22%", iconType: "transit", metricKey: "trafficCongestion", lat: 25.3109, lng: 83.0039 },
+      { name: "Madanpura Saree Lane", description: "Banarasi Weavers Co-op", x: "78%", y: "38%", iconType: "coop", metricKey: "weaverCooperativeIncome", lat: 25.3042, lng: 83.0094 },
+      { name: "Dashashwamedh Ghat", description: "River Front Purification Node", x: "32%", y: "76%", iconType: "sanitation", metricKey: "ghatCleanliness", lat: 25.3076, lng: 83.0101 },
+      { name: "Assi Ghat Anchor", description: "Boatmen Tourism Hub", x: "82%", y: "82%", iconType: "anchor", metricKey: "safetyTrustRating", lat: 25.2891, lng: 83.0125 }
     ],
     scenicRoutes: [
       { x1: "20%", y1: "22%", x2: "78%", y2: "38%" },
@@ -141,11 +254,13 @@ const cityConfigs = {
     congestionLabel: "Old City Gate Transit Bottlenecks",
     coopLabel: "Blue Pottery Guild Net Profits",
     incidentLocations: ["Hawa Mahal Crossing", "Amber Fort Gateway", "Johari Bazaar Lane", "Sanganer Textile Lane", "Bapu Bazaar"],
+    mapCenter: { lat: 26.920, lng: 75.826 },
+    mapZoom: 12,
     scenicNodes: [
-      { name: "Hawa Mahal Crossing", description: "Palace Transit Gridlock Node", x: "24%", y: "24%", iconType: "transit", metricKey: "trafficCongestion" },
-      { name: "Sanganer Craft Guild", description: "Artisan Blue Pottery Kilns", x: "72%", y: "35%", iconType: "coop", metricKey: "weaverCooperativeIncome" },
-      { name: "Johari Bazaar Plaza", description: "Bazaar Sweep Zone", x: "35%", y: "72%", iconType: "sanitation", metricKey: "ghatCleanliness" },
-      { name: "Amber Palace Gateway", description: "Heritage Guides Assembly", x: "80%", y: "78%", iconType: "anchor", metricKey: "safetyTrustRating" }
+      { name: "Hawa Mahal Crossing", description: "Palace Transit Gridlock Node", x: "24%", y: "24%", iconType: "transit", metricKey: "trafficCongestion", lat: 26.9239, lng: 75.8267 },
+      { name: "Sanganer Craft Guild", description: "Artisan Blue Pottery Kilns", x: "72%", y: "35%", iconType: "coop", metricKey: "weaverCooperativeIncome", lat: 26.8028, lng: 75.7871 },
+      { name: "Johari Bazaar Plaza", description: "Bazaar Sweep Zone", x: "35%", y: "72%", iconType: "sanitation", metricKey: "ghatCleanliness", lat: 26.9213, lng: 75.8262 },
+      { name: "Amber Palace Gateway", description: "Heritage Guides Assembly", x: "80%", y: "78%", iconType: "anchor", metricKey: "safetyTrustRating", lat: 26.9855, lng: 75.8513 }
     ],
     scenicRoutes: [
       { x1: "24%", y1: "24%", x2: "72%", y2: "35%" },
@@ -171,11 +286,13 @@ const cityConfigs = {
     congestionLabel: "Spice Street Narrow Corridor Gridlock",
     coopLabel: "Coir Weaver Union Profit Index",
     incidentLocations: ["Fort Kochi Nets", "Mattancherry Spice Street", "Kalady Weavers Guild", "Vypin Ferry Dock", "Jewish Town Lane"],
+    mapCenter: { lat: 9.965, lng: 76.250 },
+    mapZoom: 12,
     scenicNodes: [
-      { name: "Mattancherry Crossing", description: "Spice Lane Gridlock Node", x: "22%", y: "28%", iconType: "transit", metricKey: "trafficCongestion" },
-      { name: "Kalady Handcraft Guild", description: "Coir rug spinning looms", x: "74%", y: "42%", iconType: "coop", metricKey: "weaverCooperativeIncome" },
-      { name: "Fort Kochi Nets beach", description: "Hyacinth Silt sweeping zone", x: "36%", y: "74%", iconType: "sanitation", metricKey: "ghatCleanliness" },
-      { name: "Vypin Ferry Dock", description: "Backwater boat ferries", x: "85%", y: "80%", iconType: "anchor", metricKey: "safetyTrustRating" }
+      { name: "Mattancherry Crossing", description: "Spice Lane Gridlock Node", x: "22%", y: "28%", iconType: "transit", metricKey: "trafficCongestion", lat: 9.9591, lng: 76.2574 },
+      { name: "Kalady Handcraft Guild", description: "Coir rug spinning looms", x: "74%", y: "42%", iconType: "coop", metricKey: "weaverCooperativeIncome", lat: 10.1652, lng: 76.4357 },
+      { name: "Fort Kochi Nets beach", description: "Hyacinth Silt sweeping zone", x: "36%", y: "74%", iconType: "sanitation", metricKey: "ghatCleanliness", lat: 9.9687, lng: 76.2435 },
+      { name: "Vypin Ferry Dock", description: "Backwater boat ferries", x: "85%", y: "80%", iconType: "anchor", metricKey: "safetyTrustRating", lat: 9.9740, lng: 76.2483 }
     ],
     scenicRoutes: [
       { x1: "22%", y1: "28%", x2: "74%", y2: "42%" },
@@ -201,11 +318,13 @@ const cityConfigs = {
     congestionLabel: "Heritage Plaza Monument Queues",
     coopLabel: "Kishkinda Fiber Guild Dividend",
     incidentLocations: ["Virupaksha Temple Lane", "Hampi Bazaar Walkway", "Anegundi Craft Guild", "Kamalapura Sculpting Plaza", "Vittala Temple Area"],
+    mapCenter: { lat: 15.339, lng: 76.462 },
+    mapZoom: 14,
     scenicNodes: [
-      { name: "Hampi Bazaar Way", description: "Shuttle Solar cart gridlock", x: "25%", y: "20%", iconType: "transit", metricKey: "trafficCongestion" },
-      { name: "Anegundi Craft Guild", description: "Banana fiber splitting looms", x: "76%", y: "40%", iconType: "coop", metricKey: "weaverCooperativeIncome" },
-      { name: "Virupaksha Plaza", description: "Archaeological Sweep Node", x: "30%", y: "70%", iconType: "sanitation", metricKey: "ghatCleanliness" },
-      { name: "Tungabhadra Coracle Dock", description: "River rowers boarding bank", x: "82%", y: "84%", iconType: "anchor", metricKey: "safetyTrustRating" }
+      { name: "Hampi Bazaar Way", description: "Shuttle Solar cart gridlock", x: "25%", y: "20%", iconType: "transit", metricKey: "trafficCongestion", lat: 15.3350, lng: 76.4600 },
+      { name: "Anegundi Craft Guild", description: "Banana fiber splitting looms", x: "76%", y: "40%", iconType: "coop", metricKey: "weaverCooperativeIncome", lat: 15.3488, lng: 76.4862 },
+      { name: "Virupaksha Plaza", description: "Archaeological Sweep Node", x: "30%", y: "70%", iconType: "sanitation", metricKey: "ghatCleanliness", lat: 15.3353, lng: 76.4591 },
+      { name: "Tungabhadra Coracle Dock", description: "River rowers boarding bank", x: "82%", y: "84%", iconType: "anchor", metricKey: "safetyTrustRating", lat: 15.3392, lng: 76.4628 }
     ],
     scenicRoutes: [
       { x1: "25%", y1: "20%", x2: "76%", y2: "40%" },
@@ -533,6 +652,59 @@ export default function App() {
 
   // Heatmap Overlay Mode for Interactive Map
   const [heatmapMode, setHeatmapMode] = useState<'congestion' | 'cleanliness' | 'none'>('congestion');
+
+  // Track Google Maps API key quota / authentication failure
+  const [isMapAuthFailed, setIsMapAuthFailed] = useState<boolean>(false);
+
+  // Toggle for GIS Google Map vs Schematic SVG Map
+  const [mapViewMode, setMapViewMode] = useState<'schematic' | 'gis'>(hasValidGoogleKey ? 'gis' : 'schematic');
+
+  // Effect to listen for Google Maps authentication or loading quota failures
+  useEffect(() => {
+    // 1. Listen for Google Maps JS API specific auth failure
+    const originalAuthFailure = (window as any).gm_authFailure;
+    (window as any).gm_authFailure = () => {
+      console.warn("[Google Maps Auto-Fallback] Authentication/Quota limit reached callback triggered.");
+      setIsMapAuthFailed(true);
+      setMapViewMode('schematic');
+      showToast("Google Maps quota limit reached. Auto-falling back to Schematic Map.", "warning");
+      if (originalAuthFailure) {
+        try {
+          originalAuthFailure();
+        } catch (e) {
+          console.error(e);
+        }
+      }
+    };
+
+    // 2. Listen for global resource loading or script errors related to Google Maps
+    const handleGlobalError = (event: ErrorEvent) => {
+      const msg = event.message || "";
+      const url = event.filename || "";
+      if (
+        msg.includes("Maps JavaScript") || 
+        msg.includes("google.maps") || 
+        url.includes("maps.googleapis.com") ||
+        msg.includes("Script error")
+      ) {
+        console.warn("[Google Maps Auto-Fallback] Suppressed Google Maps load/script error:", msg);
+        event.preventDefault(); // Suppress the global script error from showing as a crash
+        setIsMapAuthFailed(true);
+        setMapViewMode('schematic');
+      }
+    };
+
+    window.addEventListener("error", handleGlobalError);
+
+    return () => {
+      if (originalAuthFailure) {
+        (window as any).gm_authFailure = originalAuthFailure;
+      } else {
+        delete (window as any).gm_authFailure;
+      }
+      window.removeEventListener("error", handleGlobalError);
+    };
+  }, []);
 
   // Filter mode for interactive map nodes and routes
   const [nodeTypeFilter, setNodeTypeFilter] = useState<'all' | 'transit' | 'coop' | 'sanitation' | 'anchor'>('all');
@@ -3978,7 +4150,6 @@ export default function App() {
                         <Mail className="h-3.5 w-3.5" />
                         <span>Direct Inquiry</span>
                       </button>
-
                     </div>
                   ) : (
                     <div className="p-8 text-center text-slate-400 text-xs">
@@ -3992,7 +4163,7 @@ export default function App() {
             </motion.div>
           )}
 
-          {/* TAB PANEL: TRIP NAVIGATOR MAP */}
+          {/* TAB PANEL: INTERACTIVE TRIP NAVIGATOR & REAL-TIME GIS */}
           {activeTab === 'navigator' && activeCity !== null && (
             <motion.div 
               initial={{ opacity: 0, y: 12 }}
@@ -4001,239 +4172,447 @@ export default function App() {
               className="space-y-8 lg:col-span-12" 
               id="interactive-map-navigator"
             >
-              
               {/* Introduction header */}
-              <div className="bg-brand-dark p-6 rounded-[32px] border border-brand-teal/20 shadow-sm max-w-4xl text-white">
-                <h3 className="text-sm font-extrabold text-white font-display flex items-center gap-1.5">
-                  <Compass className="h-5 w-5 text-brand-rose" />
-                  Interactive {currentCityConfig.fullName} Scenic Route & Silt Radar
-                </h3>
-                <p className="text-xs text-slate-400 leading-relaxed mt-1">
-                  Adjusting sliders directly shifts simulated spatial vectors below. Higher preservation budgets clean up waterways and plazas, tighter rate cards lower scam markers, and active hazards flood paths or restrict key transport lanes.
-                </p>
+              <div className="bg-brand-dark p-6 rounded-[32px] border border-brand-teal/20 shadow-sm max-w-4xl text-white flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="space-y-1 max-w-xl">
+                  <h3 className="text-sm font-extrabold text-white font-display flex items-center gap-1.5">
+                    <Compass className="h-5 w-5 text-brand-rose" />
+                    Interactive {currentCityConfig.fullName} Scenic Route & Silt Radar
+                  </h3>
+                  <p className="text-xs text-slate-400 leading-relaxed">
+                    Adjusting sliders directly shifts simulated spatial vectors below. Higher preservation budgets clean up waterways and plazas, tighter rate cards lower scam markers, and active hazards flood paths or restrict key transport lanes.
+                  </p>
+                </div>
+
+                {/* Map View Mode Toggle */}
+                <div className="flex bg-brand-bg/80 p-1 rounded-full border border-brand-teal/20 gap-1 shrink-0 self-start md:self-center">
+                  <button
+                    onClick={() => setMapViewMode('schematic')}
+                    className={`px-3.5 py-1.5 text-[10px] font-bold rounded-full transition-all uppercase cursor-pointer ${
+                      mapViewMode === 'schematic'
+                        ? "bg-brand-rose text-brand-deep shadow-sm font-extrabold"
+                        : "text-slate-400 hover:text-white"
+                    }`}
+                  >
+                    Schematic View
+                  </button>
+                  <button
+                    onClick={() => setMapViewMode('gis')}
+                    className={`px-3.5 py-1.5 text-[10px] font-bold rounded-full transition-all uppercase flex items-center gap-1 cursor-pointer ${
+                      mapViewMode === 'gis'
+                        ? "bg-brand-teal text-brand-dark font-black shadow-sm"
+                        : "text-slate-400 hover:text-white"
+                    }`}
+                  >
+                    🌐 GIS Real-time
+                  </button>
+                </div>
               </div>
 
-              {/* Dynamic SVG Scenic Map Container */}
+              {/* Dynamic Map Container */}
               <div className="bg-brand-dark p-6 rounded-[32px] border border-brand-teal/20 shadow-inner relative aspect-[16/9] overflow-hidden min-h-[420px] flex flex-col justify-between text-white select-none max-w-4xl">
                 
-                {/* Visual grid overlay for tech aesthetic */}
-                <div className="absolute inset-x-0 bottom-0 top-0 bg-brand-deep/5 pointer-events-none" />
-                <div className="absolute inset-0 bg-[linear-gradient(to_right,#376e6f_1px,transparent_1px),linear-gradient(to_bottom,#376e6f_1px,transparent_1px)] bg-[size:32px_32px] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_50%,#000_70%,transparent_100%)] opacity-10 pointer-events-none" />
-
-                {/* Animated waterway / river flow curve (Only shown for Varanasi, Kochi, Hampi - cities with boats) */}
-                {activeCity !== 'jaipur' && (
-                  <svg className="absolute bottom-0 inset-x-0 h-1/2 w-full pointer-events-none opacity-35">
-                    <path 
-                      d="M 0 80 Q 250 40 550 90 T 1100 60 L 1100 400 L 0 400 Z" 
-                      fill="url(#river-gradient)" 
-                      className={`transition-all duration-1000 ${inputs.weatherHazard === 'high' ? 'fill-brand-rose/30' : 'fill-brand-teal/30'}`}
-                    />
-                    <defs>
-                      <linearGradient id="river-gradient" x1="0" y1="0" x2="1" y2="1">
-                        <stop offset="0%" stopColor="#1c3334" stopOpacity="0"/>
-                        <stop offset="50%" stopColor="#376e6f" stopOpacity="0.3"/>
-                        <stop offset="100%" stopColor="#da7b93" stopOpacity="0.4"/>
-                      </linearGradient>
-                    </defs>
-                  </svg>
-                )}
-
-                {/* Dynamic coordinate-based Scenic Nodes */}
-                {currentCityConfig.scenicNodes
-                  .filter(node => nodeTypeFilter === 'all' || node.iconType === nodeTypeFilter)
-                  .map((node, index) => {
-                    const metricValue = metrics[node.metricKey as keyof SimulationResult] as number;
-                    const isCritical = node.metricKey === 'trafficCongestion' && metricValue > 70;
-                    const isClean = node.metricKey === 'ghatCleanliness' && metricValue > 80;
-                    
-                    // Heatmap integrated Node Styling
-                    let nodeBgClass = "bg-brand-bg border border-brand-teal/20";
-                    let nodeStyles: React.CSSProperties = {};
-
-                    if (heatmapMode !== 'none') {
-                      const localHeatVal = getNodeMetric(node.name, heatmapMode);
-                      const heatColor = getHeatColor(localHeatVal, heatmapMode);
-                      nodeStyles = {
-                        backgroundColor: `${heatColor}30`,
-                        borderColor: heatColor,
-                        boxShadow: `0 0 14px ${heatColor}50`,
-                        borderWidth: '2px'
-                      };
-                    } else {
-                      if (isCritical) {
-                        nodeBgClass = "bg-brand-rose/30 border border-brand-rose ring-4 ring-brand-rose/20 animate-pulse";
-                      } else if (isClean) {
-                        nodeBgClass = "bg-brand-teal/30 border border-brand-teal ring-4 ring-brand-teal/20";
-                      }
-                    }
-
-                    const isSelected = selectedNode?.name === node.name;
-                    if (isSelected) {
-                      nodeBgClass = "bg-brand-teal/40 border-2 border-brand-teal ring-8 ring-brand-teal/20 scale-110";
-                    }
-
-                    return (
-                      <motion.div 
-                        key={`${activeCity || "varanasi"}-${node.name}`} 
-                        className={`absolute z-20 flex flex-col items-center group cursor-pointer transition-all duration-300 ${isSelected ? "z-30" : ""}`}
-                        style={{ top: node.y, left: node.x }}
-                        initial={{ scale: 0, opacity: 0 }}
-                        animate={{ 
-                          scale: isSelected ? 1.15 : [0, 1.25, 0.95, 1.05, 1], 
-                          opacity: 1 
-                        }}
-                        transition={{ 
-                          duration: isSelected ? 0.2 : 1.0,
-                          ease: "easeInOut",
-                          delay: isSelected ? 0 : index * 0.08,
-                        }}
-                        whileHover={{ scale: isSelected ? 1.15 : 1.08 }}
-                        onClick={() => setSelectedNode(isSelected ? null : node)}
-                        onMouseEnter={() => setHoveredNode(node)}
-                        onMouseLeave={() => setHoveredNode(null)}
-                      >
-                        <div className="relative">
-                          <div 
-                            style={nodeStyles}
-                            className={`p-3 rounded-full flex items-center justify-center transition-all duration-500 ${nodeBgClass}`}
-                          >
-                            {node.iconType === 'transit' ? (
-                              <Navigation className="h-4 w-4 text-brand-rose rotate-90" />
-                            ) : node.iconType === 'coop' ? (
-                              <Briefcase className="h-4 w-4 text-brand-teal" />
-                            ) : node.iconType === 'sanitation' ? (
-                              <Waves className="h-4 w-4 text-brand-teal" />
-                            ) : (
-                              <Compass className="h-4 w-4 text-brand-rose" />
-                            )}
-                          </div>
-                          
-                          {node.iconType === 'coop' && (
-                            <div className="absolute -top-1 -right-1 bg-amber-500 text-brand-deep rounded-full p-0.5 border border-brand-dark animate-pulse shadow-md" title="Verified Safe-Haven Merchant">
-                              <Shield className="h-2.5 w-2.5 text-brand-deep" />
-                            </div>
-                          )}
+                {mapViewMode === 'gis' ? (
+                  (!hasValidGoogleKey || isMapAuthFailed) ? (
+                    <div className="absolute inset-0 w-full h-full z-10 bg-brand-dark/95 flex flex-col items-center justify-center text-center p-8 select-text">
+                      <div className="max-w-md space-y-4">
+                        <div className="w-12 h-12 bg-brand-rose/20 rounded-full flex items-center justify-center mx-auto border border-brand-rose/40">
+                          <Compass className="h-6 w-6 text-brand-rose animate-spin-slow" />
                         </div>
-                        <span className="text-[10px] font-bold text-slate-100 mt-1.5 font-display uppercase tracking-wider text-center max-w-[120px] bg-brand-deep/95 px-2 py-0.5 rounded-md border border-brand-rose/25 backdrop-blur">
-                          {node.name}
-                        </span>
-                        <span className="text-[8px] font-mono font-bold text-slate-300 mt-0.5">
-                          {node.metricKey === 'trafficCongestion' ? `Congestion: ${metricValue}%` :
-                           node.metricKey === 'weaverCooperativeIncome' ? `Co-op: +${metricValue}%` :
-                           node.metricKey === 'ghatCleanliness' ? `Sanitation: ${metricValue}%` :
-                           `Safety Trust: ${metricValue}/100`}
-                        </span>
+                        <h3 className="text-sm font-extrabold font-display uppercase tracking-wider text-white">
+                          {isMapAuthFailed ? "Google Maps Key Quota Reached" : "GIS Google Map Key Required"}
+                        </h3>
+                        <p className="text-[11px] text-slate-300 leading-relaxed">
+                          {isMapAuthFailed 
+                            ? "Your daily quota for the Google Maps JavaScript API has been met (or the Demo Key limit was reached). Please configure a fresh API key in Settings -> Secrets."
+                            : "Unlock real-world geographic visualization, live traffic data feeds, and precise landmark tracking across India's heritage circuits."
+                          }
+                        </p>
+                        
+                        <div className="bg-brand-bg/90 p-4 rounded-2xl border border-brand-teal/20 text-left text-[10px] space-y-2 font-mono text-slate-300">
+                          <span className="text-brand-teal font-extrabold uppercase tracking-wider text-[9px] block">Activation Guide:</span>
+                          <p>1. Open the <span className="text-white font-bold">Settings ⚙️</span> gear icon in the top-right corner of AI Studio.</p>
+                          <p>2. Go to <span className="text-white font-bold">Secrets</span>, type <code className="text-brand-rose bg-brand-rose/10 px-1 rounded">GOOGLE_MAPS_PLATFORM_KEY</code> as the name.</p>
+                          <p>3. Paste your key and click Enter.</p>
+                          <p className="text-slate-500 pt-1">Note: Exposing this triggers the "Enter your environment variable to continue" prompt automatically.</p>
+                        </div>
 
-                        {/* Floating Tooltip showing node metric details on hover */}
-                        <AnimatePresence>
-                          {hoveredNode?.name === node.name && (
-                            <motion.div
-                              initial={{ opacity: 0, y: 8, scale: 0.92 }}
-                              animate={{ opacity: 1, y: 0, scale: 1 }}
-                              exit={{ opacity: 0, y: 8, scale: 0.92 }}
-                              transition={{ duration: 0.15, ease: "easeOut" }}
-                              className="absolute bottom-full mb-3 left-1/2 -translate-x-1/2 bg-brand-dark/95 border border-brand-teal/40 backdrop-blur-md p-3 rounded-2xl shadow-2xl z-50 pointer-events-none min-w-[200px] text-left"
+                        <div className="flex gap-2.5 justify-center pt-1">
+                          <button
+                            onClick={() => setMapViewMode('schematic')}
+                            className="px-3 py-1.5 bg-brand-bg hover:bg-brand-bg/85 border border-brand-teal/20 text-slate-300 rounded-xl text-[10px] font-bold uppercase transition-all cursor-pointer"
+                          >
+                            Schematic Map
+                          </button>
+                          <a
+                            href="https://console.cloud.google.com/google/maps-apis/start?utm_campaign=gmp-code-assist-ais"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="px-3 py-1.5 bg-brand-teal text-brand-dark rounded-xl text-[10px] font-extrabold uppercase transition-all hover:bg-brand-teal/90 flex items-center gap-1 cursor-pointer"
+                          >
+                            Get Key ↗
+                          </a>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="absolute inset-0 w-full h-full z-0 bg-[#0e1a20]">
+                      <APIProvider apiKey={GOOGLE_MAPS_API_KEY} version="weekly">
+                        <Map
+                          defaultCenter={currentCityConfig.mapCenter}
+                          defaultZoom={currentCityConfig.mapZoom}
+                          center={currentCityConfig.mapCenter}
+                          zoom={currentCityConfig.mapZoom}
+                          mapId="DEMO_MAP_ID"
+                          internalUsageAttributionIds={['gmp_mcp_codeassist_v1_aistudio']}
+                          style={{ width: '100%', height: '100%' }}
+                          gestureHandling="cooperative"
+                          options={{
+                            disableDefaultUI: true,
+                            zoomControl: true,
+                            mapTypeControl: false,
+                            streetViewControl: false,
+                            fullscreenControl: false,
+                            styles: darkMapStyle
+                          }}
+                        >
+                          {/* Route line polylines */}
+                          {currentCityConfig.scenicRoutes
+                            .filter(route => {
+                              if (nodeTypeFilter === 'all') return true;
+                              const nodeA = currentCityConfig?.scenicNodes.find(n => n.x === route.x1 && n.y === route.y1);
+                              const nodeB = currentCityConfig?.scenicNodes.find(n => n.x === route.x2 && n.y === route.y2);
+                              return (nodeA && nodeA.iconType === nodeTypeFilter) || (nodeB && nodeB.iconType === nodeTypeFilter);
+                            })
+                            .map((route, i) => {
+                              const nodeA = currentCityConfig?.scenicNodes.find(n => n.x === route.x1 && n.y === route.y1);
+                              const nodeB = currentCityConfig?.scenicNodes.find(n => n.x === route.x2 && n.y === route.y2);
+                              
+                              if (!nodeA || !nodeB) return null;
+
+                              const path = [
+                                { lat: nodeA.lat, lng: nodeA.lng },
+                                { lat: nodeB.lat, lng: nodeB.lng }
+                              ];
+
+                              let strokeColor = "#376e6f";
+                              let strokeWidth = 3;
+                              let strokeOpacity = 0.5;
+                              let dashed = true;
+
+                              if (heatmapMode !== 'none') {
+                                const valA = getNodeMetric(nodeA.name, heatmapMode);
+                                const valB = getNodeMetric(nodeB.name, heatmapMode);
+                                const routeVal = (valA + valB) / 2;
+                                strokeColor = getHeatColor(routeVal, heatmapMode);
+                                strokeWidth = 6;
+                                strokeOpacity = 0.8;
+                                dashed = false;
+                              }
+
+                              return (
+                                <MapPolyline
+                                  key={`gis-route-${nodeA.name}-${nodeB.name}`}
+                                  path={path}
+                                  strokeColor={strokeColor}
+                                  strokeWidth={strokeWidth}
+                                  strokeOpacity={strokeOpacity}
+                                  dashed={dashed}
+                                />
+                              );
+                            })}
+
+                          {/* Nodes as AdvancedMarkers */}
+                          {currentCityConfig.scenicNodes
+                            .filter(node => nodeTypeFilter === 'all' || node.iconType === nodeTypeFilter)
+                            .map((node, index) => {
+                              const metricValue = metrics[node.metricKey as keyof SimulationResult] as number;
+                              const isCritical = node.metricKey === 'trafficCongestion' && metricValue > 70;
+                              const isClean = node.metricKey === 'ghatCleanliness' && metricValue > 80;
+                              const isSelected = selectedNode?.name === node.name;
+                              
+                              let markerBg = isSelected ? "bg-brand-teal border-2 border-brand-teal ring-4 ring-brand-teal/20" : "bg-brand-bg/95 border border-brand-teal/40 hover:border-brand-rose";
+                              let iconColor = isSelected ? "text-brand-dark" : "text-brand-teal";
+                              if (isCritical) {
+                                markerBg = "bg-brand-rose border-2 border-brand-rose animate-pulse ring-4 ring-brand-rose/20";
+                                iconColor = "text-white";
+                              } else if (isClean) {
+                                markerBg = "bg-brand-teal border-2 border-brand-teal ring-4 ring-brand-teal/20";
+                                iconColor = "text-brand-dark";
+                              }
+
+                              return (
+                                <AdvancedMarker
+                                  key={`gis-marker-${node.name}`}
+                                  position={{ lat: node.lat, lng: node.lng }}
+                                  title={node.name}
+                                  onClick={() => setSelectedNode(selectedNode?.name === node.name ? null : node)}
+                                >
+                                  <div 
+                                    className={`rounded-full flex items-center justify-center shadow-lg cursor-pointer transform transition-all duration-300 hover:scale-110 ${markerBg}`}
+                                    style={{ width: '38px', height: '38px' }} // Explicit dimensions as required by CF3
+                                  >
+                                    {node.iconType === 'transit' ? (
+                                      <Navigation className={`h-4 w-4 rotate-90 ${iconColor}`} />
+                                    ) : node.iconType === 'coop' ? (
+                                      <Briefcase className={`h-4 w-4 ${iconColor}`} />
+                                    ) : node.iconType === 'sanitation' ? (
+                                      <Waves className={`h-4 w-4 ${iconColor}`} />
+                                    ) : (
+                                      <Compass className={`h-4 w-4 ${iconColor}`} />
+                                    )}
+                                  </div>
+                                </AdvancedMarker>
+                              );
+                            })}
+
+                          {/* Selected InfoWindow */}
+                          {selectedNode && (
+                            <InfoWindow
+                              position={{ lat: selectedNode.lat, lng: selectedNode.lng }}
+                              onCloseClick={() => setSelectedNode(null)}
                             >
-                              <div className="flex items-center gap-1.5 border-b border-brand-teal/15 pb-1.5 mb-1.5">
-                                <span className="text-xs">
-                                  {node.iconType === 'transit' ? "🚘" : node.iconType === 'coop' ? "📦" : node.iconType === 'sanitation' ? "🌊" : "🧭"}
-                                </span>
-                                <div>
-                                  <h5 className="text-[10px] font-black text-white uppercase tracking-wide font-display leading-tight">{node.name}</h5>
-                                  <span className="text-[7.5px] font-mono font-extrabold text-brand-teal uppercase tracking-widest">{node.iconType} Node</span>
+                              <div className="text-brand-dark p-1 max-w-[200px] select-text">
+                                <h4 className="text-xs font-black uppercase tracking-wide font-display leading-tight">{selectedNode.name}</h4>
+                                <p className="text-[9px] text-slate-600 mt-1 italic">{selectedNode.description}</p>
+                                <div className="mt-2 bg-brand-teal/10 px-1.5 py-1 rounded border border-brand-teal/20 text-[8.5px] font-mono font-bold flex justify-between">
+                                  <span>Metric:</span>
+                                  <span className="text-brand-teal font-black">
+                                    {selectedNode.metricKey === 'trafficCongestion' ? `${metrics[selectedNode.metricKey as keyof SimulationResult]}%` :
+                                     selectedNode.metricKey === 'weaverCooperativeIncome' ? `+${metrics[selectedNode.metricKey as keyof SimulationResult]}%` :
+                                     selectedNode.metricKey === 'ghatCleanliness' ? `${metrics[selectedNode.metricKey as keyof SimulationResult]}%` :
+                                     `${metrics[selectedNode.metricKey as keyof SimulationResult]}/100`}
+                                  </span>
                                 </div>
                               </div>
-                              
-                              <p className="text-[8.5px] text-slate-300 leading-normal mb-2 italic">
-                                {node.description}
-                              </p>
-
-                              <div className="flex justify-between items-center bg-brand-teal/10 px-2 py-1 rounded-lg border border-brand-teal/20 text-[9px]">
-                                <span className="font-mono font-bold text-slate-400">Live Metric:</span>
-                                <span className="font-mono font-black text-brand-teal">
-                                  {node.metricKey === 'trafficCongestion' ? `Congestion: ${metricValue}%` :
-                                   node.metricKey === 'weaverCooperativeIncome' ? `Co-op growth: +${metricValue}%` :
-                                   node.metricKey === 'ghatCleanliness' ? `Sanitation: ${metricValue}%` :
-                                   `Safety Trust: ${metricValue}/100`}
-                                </span>
-                              </div>
-                            </motion.div>
+                            </InfoWindow>
                           )}
-                        </AnimatePresence>
-                      </motion.div>
-                    );
-                  })}
+                        </Map>
+                      </APIProvider>
+                    </div>
+                  )
+                ) : (
+                  <>
+                    {/* Visual grid overlay for tech aesthetic */}
+                    <div className="absolute inset-x-0 bottom-0 top-0 bg-brand-deep/5 pointer-events-none" />
+                    <div className="absolute inset-0 bg-[linear-gradient(to_right,#376e6f_1px,transparent_1px),linear-gradient(to_bottom,#376e6f_1px,transparent_1px)] bg-[size:32px_32px] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_50%,#000_70%,transparent_100%)] opacity-10 pointer-events-none" />
 
-                {/* Symmetrical connective paths with Heatmap visualization */}
-                <svg className="absolute inset-0 w-full h-full pointer-events-none z-10">
-                  {currentCityConfig.scenicRoutes
-                    .filter(route => {
-                      if (nodeTypeFilter === 'all') return true;
-                      const nodeA = currentCityConfig?.scenicNodes.find(n => n.x === route.x1 && n.y === route.y1);
-                      const nodeB = currentCityConfig?.scenicNodes.find(n => n.x === route.x2 && n.y === route.y2);
-                      return (nodeA && nodeA.iconType === nodeTypeFilter) || (nodeB && nodeB.iconType === nodeTypeFilter);
-                    })
-                    .map((route, i) => {
-                      if (heatmapMode === 'none') {
+                    {/* Animated waterway / river flow curve (Only shown for Varanasi, Kochi, Hampi - cities with boats) */}
+                    {activeCity !== 'jaipur' && (
+                      <svg className="absolute bottom-0 inset-x-0 h-1/2 w-full pointer-events-none opacity-35">
+                        <path 
+                          d="M 0 80 Q 250 40 550 90 T 1100 60 L 1100 400 L 0 400 Z" 
+                          fill="url(#river-gradient)" 
+                          className={`transition-all duration-1000 ${inputs.weatherHazard === 'high' ? 'fill-brand-rose/30' : 'fill-brand-teal/30'}`}
+                        />
+                        <defs>
+                          <linearGradient id="river-gradient" x1="0" y1="0" x2="1" y2="1">
+                            <stop offset="0%" stopColor="#1c3334" stopOpacity="0"/>
+                            <stop offset="50%" stopColor="#376e6f" stopOpacity="0.3"/>
+                            <stop offset="100%" stopColor="#da7b93" stopOpacity="0.4"/>
+                          </linearGradient>
+                        </defs>
+                      </svg>
+                    )}
+
+                    {/* Dynamic coordinate-based Scenic Nodes */}
+                    {currentCityConfig.scenicNodes
+                      .filter(node => nodeTypeFilter === 'all' || node.iconType === nodeTypeFilter)
+                      .map((node, index) => {
+                        const metricValue = metrics[node.metricKey as keyof SimulationResult] as number;
+                        const isCritical = node.metricKey === 'trafficCongestion' && metricValue > 70;
+                        const isClean = node.metricKey === 'ghatCleanliness' && metricValue > 80;
+                        
+                        // Heatmap integrated Node Styling
+                        let nodeBgClass = "bg-brand-bg border border-brand-teal/20";
+                        let nodeStyles: React.CSSProperties = {};
+
+                        if (heatmapMode !== 'none') {
+                          const localHeatVal = getNodeMetric(node.name, heatmapMode);
+                          const heatColor = getHeatColor(localHeatVal, heatmapMode);
+                          nodeStyles = {
+                            backgroundColor: `${heatColor}30`,
+                            borderColor: heatColor,
+                            boxShadow: `0 0 14px ${heatColor}50`,
+                            borderWidth: '2px'
+                          };
+                        } else {
+                          if (isCritical) {
+                            nodeBgClass = "bg-brand-rose/30 border border-brand-rose ring-4 ring-brand-rose/20 animate-pulse";
+                          } else if (isClean) {
+                            nodeBgClass = "bg-brand-teal/30 border border-brand-teal ring-4 ring-brand-teal/20";
+                          }
+                        }
+
+                        const isSelected = selectedNode?.name === node.name;
+                        if (isSelected) {
+                          nodeBgClass = "bg-brand-teal/40 border-2 border-brand-teal ring-8 ring-brand-teal/20 scale-110";
+                        }
+
                         return (
-                          <line 
-                            key={`route-none-${route.x1}-${route.y1}-${route.x2}-${route.y2}`}
-                            x1={route.x1} 
-                            y1={route.y1} 
-                            x2={route.x2} 
-                            y2={route.y2} 
-                            stroke="#376e6f" 
-                            strokeWidth="1.5" 
-                            strokeDasharray="4 4" 
-                            className="opacity-40 transition-all duration-700 ease-in-out"
-                          />
+                          <motion.div 
+                            key={`${activeCity || "varanasi"}-${node.name}`} 
+                            className={`absolute z-20 flex flex-col items-center group cursor-pointer transition-all duration-300 ${isSelected ? "z-30" : ""}`}
+                            style={{ top: node.y, left: node.x }}
+                            initial={{ scale: 0, opacity: 0 }}
+                            animate={{ 
+                              scale: isSelected ? 1.15 : [0, 1.25, 0.95, 1.05, 1], 
+                              opacity: 1 
+                            }}
+                            transition={{ 
+                              duration: isSelected ? 0.2 : 1.0,
+                              ease: "easeInOut",
+                              delay: isSelected ? 0 : index * 0.08,
+                            }}
+                            whileHover={{ scale: isSelected ? 1.08 : 1.08 }}
+                            onClick={() => setSelectedNode(isSelected ? null : node)}
+                            onMouseEnter={() => setHoveredNode(node)}
+                            onMouseLeave={() => setHoveredNode(null)}
+                          >
+                            <div className="relative">
+                              <div 
+                                style={nodeStyles}
+                                className={`p-3 rounded-full flex items-center justify-center transition-all duration-500 ${nodeBgClass}`}
+                              >
+                                {node.iconType === 'transit' ? (
+                                  <Navigation className="h-4 w-4 text-brand-rose rotate-90" />
+                                ) : node.iconType === 'coop' ? (
+                                  <Briefcase className="h-4 w-4 text-brand-teal" />
+                                ) : node.iconType === 'sanitation' ? (
+                                  <Waves className="h-4 w-4 text-brand-teal" />
+                                ) : (
+                                  <Compass className="h-4 w-4 text-brand-rose" />
+                                )}
+                              </div>
+                              
+                              {node.iconType === 'coop' && (
+                                <div className="absolute -top-1 -right-1 bg-amber-500 text-brand-deep rounded-full p-0.5 border border-brand-dark animate-pulse shadow-md" title="Verified Safe-Haven Merchant">
+                                  <Shield className="h-2.5 w-2.5 text-brand-deep" />
+                                </div>
+                              )}
+                            </div>
+                            <span className="text-[10px] font-bold text-slate-100 mt-1.5 font-display uppercase tracking-wider text-center max-w-[120px] bg-brand-deep/95 px-2 py-0.5 rounded-md border border-brand-rose/25 backdrop-blur">
+                              {node.name}
+                            </span>
+                            <span className="text-[8px] font-mono font-bold text-slate-300 mt-0.5">
+                              {node.metricKey === 'trafficCongestion' ? `Congestion: ${metricValue}%` :
+                               node.metricKey === 'weaverCooperativeIncome' ? `Co-op: +${metricValue}%` :
+                               node.metricKey === 'ghatCleanliness' ? `Sanitation: ${metricValue}%` :
+                               `Safety Trust: ${metricValue}/100`}
+                            </span>
+
+                            {/* Floating Tooltip showing node metric details on hover */}
+                            <AnimatePresence>
+                              {hoveredNode?.name === node.name && (
+                                <motion.div
+                                  initial={{ opacity: 0, y: 8, scale: 0.92 }}
+                                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                                  exit={{ opacity: 0, y: 8, scale: 0.92 }}
+                                  transition={{ duration: 0.15, ease: "easeOut" }}
+                                  className="absolute bottom-full mb-3 left-1/2 -translate-x-1/2 bg-brand-dark/95 border border-brand-teal/40 backdrop-blur-md p-3 rounded-2xl shadow-2xl z-50 pointer-events-none min-w-[200px] text-left"
+                                >
+                                  <div className="flex items-center gap-1.5 border-b border-brand-teal/15 pb-1.5 mb-1.5">
+                                    <span className="text-xs">
+                                      {node.iconType === 'transit' ? "🚘" : node.iconType === 'coop' ? "📦" : node.iconType === 'sanitation' ? "🌊" : "🧭"}
+                                    </span>
+                                    <div>
+                                      <h5 className="text-[10px] font-black text-white uppercase tracking-wide font-display leading-tight">{node.name}</h5>
+                                      <span className="text-[7.5px] font-mono font-extrabold text-brand-teal uppercase tracking-widest">{node.iconType} Node</span>
+                                    </div>
+                                  </div>
+                                  
+                                  <p className="text-[8.5px] text-slate-300 leading-normal mb-2 italic">
+                                    {node.description}
+                                  </p>
+
+                                  <div className="flex justify-between items-center bg-brand-teal/10 px-2 py-1 rounded-lg border border-brand-teal/20 text-[9px]">
+                                    <span className="font-mono font-bold text-slate-400">Live Metric:</span>
+                                    <span className="font-mono font-black text-brand-teal">
+                                      {node.metricKey === 'trafficCongestion' ? `Congestion: ${metricValue}%` :
+                                       node.metricKey === 'weaverCooperativeIncome' ? `Co-op growth: +${metricValue}%` :
+                                       node.metricKey === 'ghatCleanliness' ? `Sanitation: ${metricValue}%` :
+                                       `Safety Trust: ${metricValue}/100`}
+                                    </span>
+                                  </div>
+                                </motion.div>
+                              )}
+                            </AnimatePresence>
+                          </motion.div>
                         );
-                      }
+                      })}
 
-                      const valA = getNodeMetric(findNodeNameByCoords(route.x1, route.y1), heatmapMode);
-                      const valB = getNodeMetric(findNodeNameByCoords(route.x2, route.y2), heatmapMode);
-                      const routeVal = (valA + valB) / 2;
-                      const heatColor = getHeatColor(routeVal, heatmapMode);
+                    {/* Symmetrical connective paths with Heatmap visualization */}
+                    <svg className="absolute inset-0 w-full h-full pointer-events-none z-10">
+                      {currentCityConfig.scenicRoutes
+                        .filter(route => {
+                          if (nodeTypeFilter === 'all') return true;
+                          const nodeA = currentCityConfig?.scenicNodes.find(n => n.x === route.x1 && n.y === route.y1);
+                          const nodeB = currentCityConfig?.scenicNodes.find(n => n.x === route.x2 && n.y === route.y2);
+                          return (nodeA && nodeA.iconType === nodeTypeFilter) || (nodeB && nodeB.iconType === nodeTypeFilter);
+                        })
+                        .map((route, i) => {
+                          if (heatmapMode === 'none') {
+                            return (
+                              <line 
+                                key={`route-none-${route.x1}-${route.y1}-${route.x2}-${route.y2}`}
+                                x1={route.x1} 
+                                y1={route.y1} 
+                                x2={route.x2} 
+                                y2={route.y2} 
+                                stroke="#376e6f" 
+                                strokeWidth="1.5" 
+                                strokeDasharray="4 4" 
+                                className="opacity-40 transition-all duration-700 ease-in-out"
+                              />
+                            );
+                          }
 
-                      return (
-                        <React.Fragment key={`route-group-${route.x1}-${route.y1}-${route.x2}-${route.y2}`}>
-                          {/* Underlayer thick blurring heat signature */}
-                          <line 
-                            x1={route.x1} 
-                            y1={route.y1} 
-                            x2={route.x2} 
-                            y2={route.y2} 
-                            stroke={heatColor} 
-                            strokeWidth="14" 
-                            strokeLinecap="round"
-                            className="opacity-30 blur-[4px] transition-all duration-700 ease-in-out" 
-                          />
-                          {/* Middle solid vibrant heat street corridor */}
-                          <line 
-                            x1={route.x1} 
-                            y1={route.y1} 
-                            x2={route.x2} 
-                            y2={route.y2} 
-                            stroke={heatColor} 
-                            strokeWidth="6" 
-                            strokeLinecap="round"
-                            className="opacity-75 transition-all duration-700 ease-in-out" 
-                          />
-                          {/* Moving flow particles */}
-                          <line 
-                            x1={route.x1} 
-                            y1={route.y1} 
-                            x2={route.x2} 
-                            y2={route.y2} 
-                            stroke="#ffffff" 
-                            strokeWidth="1.5" 
-                            strokeDasharray="5 15" 
-                            className="opacity-50 animate-dash-flow transition-all duration-700 ease-in-out" 
-                          />
-                        </React.Fragment>
-                      );
-                    })}
-                </svg>
+                          const valA = getNodeMetric(findNodeNameByCoords(route.x1, route.y1), heatmapMode);
+                          const valB = getNodeMetric(findNodeNameByCoords(route.x2, route.y2), heatmapMode);
+                          const routeVal = (valA + valB) / 2;
+                          const heatColor = getHeatColor(routeVal, heatmapMode);
+
+                          return (
+                            <React.Fragment key={`route-group-${route.x1}-${route.y1}-${route.x2}-${route.y2}`}>
+                              {/* Underlayer thick blurring heat signature */}
+                              <line 
+                                x1={route.x1} 
+                                y1={route.y1} 
+                                x2={route.x2} 
+                                y2={route.y2} 
+                                stroke={heatColor} 
+                                strokeWidth="14" 
+                                strokeLinecap="round"
+                                className="opacity-30 blur-[4px] transition-all duration-700 ease-in-out" 
+                              />
+                              {/* Middle solid vibrant heat street corridor */}
+                              <line 
+                                x1={route.x1} 
+                                y1={route.y1} 
+                                x2={route.x2} 
+                                y2={route.y2} 
+                                stroke={heatColor} 
+                                strokeWidth="6" 
+                                strokeLinecap="round"
+                                className="opacity-75 transition-all duration-700 ease-in-out" 
+                              />
+                              {/* Moving flow particles */}
+                              <line 
+                                x1={route.x1} 
+                                y1={route.y1} 
+                                x2={route.x2} 
+                                y2={route.y2} 
+                                stroke="#ffffff" 
+                                strokeWidth="1.5" 
+                                strokeDasharray="5 15" 
+                                className="opacity-50 animate-dash-flow transition-all duration-700 ease-in-out" 
+                              />
+                            </React.Fragment>
+                          );
+                        })}
+                    </svg>
+                  </>
+                )}
 
                 {/* Float Status Overlays & Heatmap Toggle Controller */}
                 <div className="absolute top-4 left-4 bg-brand-dark/95 backdrop-blur-md p-4 rounded-2xl border border-brand-teal/20 z-30 flex flex-col gap-2.5 shadow-xl max-w-[280px]">
@@ -4398,7 +4777,7 @@ export default function App() {
                     initial={{ opacity: 0, y: 15, scale: 0.95 }}
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, y: 15, scale: 0.95 }}
-                    className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-brand-dark/95 backdrop-blur-md p-3.5 rounded-2xl border-2 border-brand-teal w-[300px] z-40 shadow-2xl text-left flex flex-col gap-2"
+                    className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-brand-dark/95 backdrop-blur-md p-3.5 rounded-2xl border-2 border-brand-teal w-[300px] z-40 shadow-2xl text-left flex flex-col gap-2 select-text"
                   >
                     <div className="flex justify-between items-start">
                       <div className="flex items-center gap-1.5">
